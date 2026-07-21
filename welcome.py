@@ -83,13 +83,14 @@ def _parse_vargs(text: str) -> dict:
 
 
 def _resolve_vars(text: str, member: discord.Member) -> str:
-    """Reemplaza {user.mention}, {user.tag}, {user.avatar}, {guild.count}."""
+    """Reemplaza {user.mention}, {user.tag}, {user.avatar}, {guild.count}, {guild.name}."""
     return (
         text
         .replace("{user.mention}", member.mention)
         .replace("{user.tag}", str(member))
         .replace("{user.avatar}", member.display_avatar.url)
         .replace("{guild.count}", str(member.guild.member_count))
+        .replace("{guild.name}", member.guild.name)
     )
 
 
