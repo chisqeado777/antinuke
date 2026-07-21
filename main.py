@@ -52,8 +52,6 @@ class AntiNukeBot(commands.Bot):
             "lockdown",
             "unban",
             "voice",
-            "modlog",
-            "panic",
         ]
         for cog in cogs:
             try:
