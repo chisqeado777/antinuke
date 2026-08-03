@@ -119,6 +119,17 @@ class VoicePanel(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item):
+        log.error(f"Error en el panel de voz ({item.custom_id if hasattr(item, 'custom_id') else item}): {error}")
+        message = "Ocurrió un error al ejecutar esa acción. Puede que al bot le falten permisos en este canal."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            pass
+
     async def _check(self, interaction: discord.Interaction):
         channel = interaction.channel
         if not isinstance(channel, discord.VoiceChannel):
@@ -175,7 +186,7 @@ class VoicePanel(discord.ui.View):
 
     # ── Fila 2 ──────────────────────────────────────────────────────────────
 
-    @discord.ui.button(emoji=EMOJI["disconnect"], style=discord.ButtonStyle.danger, custom_id="vc_disconnect", row=1)
+    @discord.ui.button(emoji=EMOJI["disconnect"], style=discord.ButtonStyle.secondary, custom_id="vc_disconnect", row=1)
     async def disconnect(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
@@ -183,7 +194,7 @@ class VoicePanel(discord.ui.View):
         view = KickSelectView(channel)
         await interaction.response.send_message("Elige a quién desconectar:", view=view, ephemeral=True)
 
-    @discord.ui.button(emoji=EMOJI["claim"], style=discord.ButtonStyle.success, custom_id="vc_claim", row=1)
+    @discord.ui.button(emoji=EMOJI["claim"], style=discord.ButtonStyle.secondary, custom_id="vc_claim", row=1)
     async def claim(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = interaction.channel
         if not isinstance(channel, discord.VoiceChannel):
