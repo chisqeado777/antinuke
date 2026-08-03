@@ -12,6 +12,7 @@ def default_guild_config() -> dict:
     return {
         "prefix": DEFAULT_PREFIX,
         "log_channel": None,
+        "log_channels": {},
         "modlog_channel": None,
         "whitelist": [],
         "antinuke_admins": [],
