@@ -2,15 +2,43 @@ import discord
 from datetime import datetime, timezone
 from config import db
 import logging
+from webhook_utils import send_via_webhook
 
 log = logging.getLogger("antinuke.logger")
 
 PUNISHMENT_LABELS = {
-    "ban": "Banned",
-    "kick": "Kicked",
-    "strip": "Roles Stripped",
-    "mute": "Server Muted",
+    "ban": "Baneado",
+    "kick": "Expulsado",
+    "strip": "Roles Retirados",
+    "mute": "Muteado en el Servidor",
 }
+
+# Categorías de log disponibles y el nombre de canal que les corresponde
+# (usado por el comando de auto-configuración para crearlos y enlazarlos)
+LOG_CATEGORIES = {
+    "messages": "logs-messages",
+    "channels": "logs-channels",
+    "roles": "logs-roles",
+    "tickets": "logs-tickets",
+    "invites": "logs-invites",
+    "members": "logs-members",
+    "voice": "logs-voice",
+    "mod": "logs-mod",
+    "emojis": "logs-emojis",
+    "jail": "logs-jail",
+}
+
+
+def _resolve_log_channel(guild: discord.Guild, config: dict, category: str):
+    """
+    Busca el canal para esta categoría de log. Si no hay uno configurado
+    específicamente, cae de vuelta al canal de logs general (legado).
+    """
+    log_channels = config.get("log_channels", {})
+    channel_id = log_channels.get(category) or config.get("log_channel")
+    if not channel_id:
+        return None
+    return guild.get_channel(int(channel_id))
 
 
 async def send_log(
@@ -21,27 +49,25 @@ async def send_log(
     moderator: discord.Member | discord.User | None,
     reason: str,
     module: str,
+    category: str = "mod",
     extra_fields: list[tuple] | None = None,
     color: int | None = None,
 ):
     """
-    Send a professional log embed to the guild's log channel.
+    Envía un embed de log al canal correspondiente a la categoría indicada
+    (mod, channels, roles, emojis, members, voice, invites, messages, jail).
     """
     config = db.get_guild(guild.id)
-    log_channel_id = config.get("log_channel")
-    if not log_channel_id:
-        return
-
-    channel = guild.get_channel(int(log_channel_id))
+    channel = _resolve_log_channel(guild, config, category)
     if not channel:
         return
 
     embed_cfg = config.get("log_embed", {})
     embed_color = color or embed_cfg.get("color", 0x2b2d31)
-    footer_text = embed_cfg.get("footer_text", "AntiNuke Protection")
+    footer_text = embed_cfg.get("footer_text", "Protección AntiNuke")
     show_thumbnail = embed_cfg.get("thumbnail", True)
 
-    punishment = config["antinuke"].get("punishment", "ban")
+    punishment = config.get("antinuke", {}).get("punishment", "ban")
     punishment_label = PUNISHMENT_LABELS.get(punishment, punishment.capitalize())
 
     now = datetime.now(timezone.utc)
@@ -53,27 +79,25 @@ async def send_log(
         icon_url=guild.icon.url if guild.icon else None
     )
 
-    # Title line
     embed.title = f"AntiNuke — {module}"
 
-    # Moderator / Punished user
     if target:
         embed.add_field(
-            name="Offender",
+            name="Infractor",
             value=f"{target.mention} `{target}` (`{target.id}`)",
             inline=False
         )
     if moderator:
         embed.add_field(
-            name="Actioned By",
+            name="Acción Tomada Por",
             value=f"{moderator.mention} `{moderator}` (`{moderator.id}`)",
             inline=False
         )
 
-    embed.add_field(name="Action Taken", value=f"`{punishment_label}`", inline=True)
-    embed.add_field(name="Module", value=f"`{module}`", inline=True)
-    embed.add_field(name="Triggered At", value=timestamp_str, inline=False)
-    embed.add_field(name="Reason", value=f"```{reason}```", inline=False)
+    embed.add_field(name="Sanción Aplicada", value=f"`{punishment_label}`", inline=True)
+    embed.add_field(name="Módulo", value=f"`{module}`", inline=True)
+    embed.add_field(name="Detectado A Las", value=timestamp_str, inline=False)
+    embed.add_field(name="Razón", value=f"```{reason}```", inline=False)
 
     if extra_fields:
         for name, value, inline in extra_fields:
@@ -85,6 +109,6 @@ async def send_log(
     embed.set_footer(text=footer_text)
 
     try:
-        await channel.send(embed=embed)
+        await send_via_webhook(channel, embed=embed)
     except Exception as e:
-        log.warning(f"Failed to send log embed in {guild.name}: {e}")
+        log.warning(f"No se pudo enviar el log en {guild.name}: {e}")
