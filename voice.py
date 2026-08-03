@@ -23,8 +23,62 @@ import discord
 from discord.ext import commands
 from config import db
 import logging
+from webhook_utils import send_via_webhook
 
 log = logging.getLogger("antinuke.voice")
+
+# ── Emojis del panel ────────────────────────────────────────────────────────
+# Por ahora son emojis normales de Discord. Cuando subas tus emojis custom al
+# bot (Developer Portal → tu App → Emojis), solo reemplaza cada valor de aquí
+# por el formato "<:nombre:id_del_emoji>" y el panel los usa automáticamente.
+EMOJI = {
+    "lock": "<:lock:1533702526979936336>",
+    "unlock": "<:unlock:1533702560366592090>",
+    "hide": "<:hide:1533702475759091872>",
+    "reveal": "<:reveal:1533702543991902209>",
+    "activity": "<:activity:1533702413314166876>",
+    "increase": "<:increase:1533702491273826334>",
+    "decrease": "<:decrease:1533702441160147024>",
+    "disconnect": "<:disconnect:1533702461968351313>",
+    "claim": "<:claim:1533702427973386302>",
+    "info": "<:info:1533702510974337065>",
+}
+
+# Actividades embebidas de Discord disponibles para el botón "Iniciar actividad"
+# (IDs públicos oficiales de aplicaciones de Discord)
+ACTIVITIES = {
+    "Watch Together": 880218394199220334,
+    "Poker Night": 755827207812677713,
+    "Chess in the Park": 832012774040141894,
+    "Sketch Heads": 902271654783242291,
+}
+
+
+def _build_panel_embed(guild: discord.Guild) -> discord.Embed:
+    embed = discord.Embed(
+        title="🎙️ Panel de Voz",
+        description="Usa los botones de abajo para controlar tu canal de voz.",
+        color=0x2b2d31,
+    )
+    embed.add_field(
+        name="Uso de Botones",
+        value=(
+            f"{EMOJI['lock']} — **Bloquear** el canal de voz\n"
+            f"{EMOJI['unlock']} — **Desbloquear** el canal de voz\n"
+            f"{EMOJI['hide']} — **Ocultar** el canal de voz\n"
+            f"{EMOJI['activity']} — **Iniciar** una actividad\n"
+            f"{EMOJI['increase']} — **Aumentar** el límite de usuarios\n"
+            f"{EMOJI['disconnect']} — **Desconectar** a un miembro\n"
+            f"{EMOJI['claim']} — **Reclamar** el canal de voz\n"
+            f"{EMOJI['reveal']} — **Revelar** el canal de voz\n"
+            f"{EMOJI['info']} — **Ver** información del canal\n"
+            f"{EMOJI['decrease']} — **Disminuir** el límite de usuarios"
+        ),
+        inline=False,
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    return embed
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -75,61 +129,61 @@ class VoicePanel(discord.ui.View):
             return None
         return channel
 
-    @discord.ui.button(label="Lock", emoji="🔒", style=discord.ButtonStyle.secondary, custom_id="vc_lock")
+    # ── Fila 1 ──────────────────────────────────────────────────────────────
+
+    @discord.ui.button(emoji=EMOJI["lock"], style=discord.ButtonStyle.secondary, custom_id="vc_lock", row=0)
     async def lock(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
             return
         await channel.set_permissions(interaction.guild.default_role, connect=False)
-        await interaction.response.send_message("Canal bloqueado 🔒", ephemeral=True)
+        await interaction.response.send_message(f"Canal bloqueado {EMOJI['lock']}", ephemeral=True)
 
-    @discord.ui.button(label="Unlock", emoji="🔓", style=discord.ButtonStyle.secondary, custom_id="vc_unlock")
+    @discord.ui.button(emoji=EMOJI["unlock"], style=discord.ButtonStyle.secondary, custom_id="vc_unlock", row=0)
     async def unlock(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
             return
         await channel.set_permissions(interaction.guild.default_role, connect=True)
-        await interaction.response.send_message("Canal desbloqueado 🔓", ephemeral=True)
+        await interaction.response.send_message(f"Canal desbloqueado {EMOJI['unlock']}", ephemeral=True)
 
-    @discord.ui.button(label="Hide", emoji="🙈", style=discord.ButtonStyle.secondary, custom_id="vc_hide")
+    @discord.ui.button(emoji=EMOJI["hide"], style=discord.ButtonStyle.secondary, custom_id="vc_hide", row=0)
     async def hide(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
             return
         await channel.set_permissions(interaction.guild.default_role, view_channel=False)
-        await interaction.response.send_message("Canal oculto 🙈", ephemeral=True)
+        await interaction.response.send_message(f"Canal oculto {EMOJI['hide']}", ephemeral=True)
 
-    @discord.ui.button(label="Unhide", emoji="👁️", style=discord.ButtonStyle.secondary, custom_id="vc_unhide")
-    async def unhide(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(emoji=EMOJI["activity"], style=discord.ButtonStyle.secondary, custom_id="vc_activity", row=0)
+    async def activity(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
             return
-        await channel.set_permissions(interaction.guild.default_role, view_channel=True)
-        await interaction.response.send_message("Canal visible 👁️", ephemeral=True)
+        await interaction.response.send_message(
+            "Elige una actividad para iniciar:", view=ActivitySelectView(channel), ephemeral=True
+        )
 
-    @discord.ui.button(label="Rename", emoji="✏️", style=discord.ButtonStyle.primary, custom_id="vc_rename")
-    async def rename(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(emoji=EMOJI["increase"], style=discord.ButtonStyle.secondary, custom_id="vc_increase", row=0)
+    async def increase(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
             return
-        await interaction.response.send_modal(RenameModal(channel))
+        new_limit = min((channel.user_limit or 0) + 1, 99)
+        await channel.edit(user_limit=new_limit)
+        await interaction.response.send_message(f"Límite subido a `{new_limit}` {EMOJI['increase']}", ephemeral=True)
 
-    @discord.ui.button(label="Limit", emoji="👥", style=discord.ButtonStyle.primary, custom_id="vc_limit")
-    async def limit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channel = await self._check(interaction)
-        if not channel:
-            return
-        await interaction.response.send_modal(LimitModal(channel))
+    # ── Fila 2 ──────────────────────────────────────────────────────────────
 
-    @discord.ui.button(label="Kick", emoji="👢", style=discord.ButtonStyle.danger, custom_id="vc_kick")
-    async def kick(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(emoji=EMOJI["disconnect"], style=discord.ButtonStyle.danger, custom_id="vc_disconnect", row=1)
+    async def disconnect(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = await self._check(interaction)
         if not channel:
             return
         view = KickSelectView(channel)
-        await interaction.response.send_message("Elige a quién sacar:", view=view, ephemeral=True)
+        await interaction.response.send_message("Elige a quién desconectar:", view=view, ephemeral=True)
 
-    @discord.ui.button(label="Claim", emoji="👑", style=discord.ButtonStyle.success, custom_id="vc_claim")
+    @discord.ui.button(emoji=EMOJI["claim"], style=discord.ButtonStyle.success, custom_id="vc_claim", row=1)
     async def claim(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = interaction.channel
         if not isinstance(channel, discord.VoiceChannel):
@@ -146,35 +200,70 @@ class VoicePanel(discord.ui.View):
         _save_temp_channels(interaction.guild.id, temp)
 
         await channel.set_permissions(interaction.user, manage_channels=True, move_members=True, mute_members=True)
-        await interaction.response.send_message(f"{interaction.user.mention} ahora es el dueño de este canal 👑")
+        await interaction.response.send_message(f"{interaction.user.mention} ahora es el dueño de este canal {EMOJI['claim']}")
+
+    @discord.ui.button(emoji=EMOJI["reveal"], style=discord.ButtonStyle.secondary, custom_id="vc_reveal", row=1)
+    async def reveal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self._check(interaction)
+        if not channel:
+            return
+        await channel.set_permissions(interaction.guild.default_role, view_channel=True)
+        await interaction.response.send_message(f"Canal visible {EMOJI['reveal']}", ephemeral=True)
+
+    @discord.ui.button(emoji=EMOJI["info"], style=discord.ButtonStyle.secondary, custom_id="vc_info", row=1)
+    async def info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = interaction.channel
+        if not isinstance(channel, discord.VoiceChannel):
+            return await interaction.response.send_message("Esto solo funciona dentro del VC.", ephemeral=True)
+
+        owner_id = _get_owner(interaction.guild.id, channel.id)
+        owner = interaction.guild.get_member(owner_id) if owner_id else None
+        perms_everyone = channel.overwrites_for(interaction.guild.default_role)
+
+        embed = discord.Embed(title=f"Información — {channel.name}", color=0x2b2d31)
+        embed.add_field(name="Dueño", value=owner.mention if owner else "Desconocido", inline=True)
+        embed.add_field(name="Miembros conectados", value=str(len(channel.members)), inline=True)
+        embed.add_field(name="Límite de usuarios", value=str(channel.user_limit or "Sin límite"), inline=True)
+        embed.add_field(name="Bloqueado", value="Sí" if perms_everyone.connect is False else "No", inline=True)
+        embed.add_field(name="Oculto", value="Sí" if perms_everyone.view_channel is False else "No", inline=True)
+        embed.add_field(name="ID del canal", value=f"`{channel.id}`", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(emoji=EMOJI["decrease"], style=discord.ButtonStyle.secondary, custom_id="vc_decrease", row=1)
+    async def decrease(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self._check(interaction)
+        if not channel:
+            return
+        new_limit = max((channel.user_limit or 0) - 1, 0)
+        await channel.edit(user_limit=new_limit)
+        label = new_limit if new_limit else "sin límite"
+        await interaction.response.send_message(f"Límite bajado a `{label}` {EMOJI['decrease']}", ephemeral=True)
 
 
-class RenameModal(discord.ui.Modal, title="Renombrar canal"):
-    name = discord.ui.TextInput(label="Nuevo nombre", max_length=100)
-
+class ActivitySelectView(discord.ui.View):
     def __init__(self, channel: discord.VoiceChannel):
-        super().__init__()
+        super().__init__(timeout=60)
+        self.add_item(ActivitySelect(channel))
+
+
+class ActivitySelect(discord.ui.Select):
+    def __init__(self, channel: discord.VoiceChannel):
+        options = [discord.SelectOption(label=name) for name in ACTIVITIES]
+        super().__init__(placeholder="Selecciona una actividad", options=options)
         self.channel = channel
 
-    async def on_submit(self, interaction: discord.Interaction):
-        await self.channel.edit(name=str(self.name))
-        await interaction.response.send_message(f"Canal renombrado a **{self.name}**.", ephemeral=True)
-
-
-class LimitModal(discord.ui.Modal, title="Límite de usuarios"):
-    limit = discord.ui.TextInput(label="Límite (0 = sin límite)", max_length=3)
-
-    def __init__(self, channel: discord.VoiceChannel):
-        super().__init__()
-        self.channel = channel
-
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
+        app_id = ACTIVITIES[self.values[0]]
         try:
-            value = int(str(self.limit))
-        except ValueError:
-            return await interaction.response.send_message("Eso no es un número válido.", ephemeral=True)
-        await self.channel.edit(user_limit=max(0, min(value, 99)))
-        await interaction.response.send_message(f"Límite ajustado a `{value}`.", ephemeral=True)
+            invite = await self.channel.create_invite(
+                max_age=3600,
+                target_type=discord.InviteTarget.embedded_application,
+                target_application_id=app_id,
+                reason=f"Actividad iniciada por {interaction.user}",
+            )
+            await interaction.response.send_message(f"🕹️ **{self.values[0]}** iniciada: {invite.url}", ephemeral=True)
+        except discord.HTTPException as e:
+            await interaction.response.send_message(f"No se pudo iniciar la actividad: {e}", ephemeral=True)
 
 
 class KickSelectView(discord.ui.View):
@@ -226,11 +315,9 @@ class Voice(commands.Cog):
             _save_temp_channels(guild.id, temp)
 
             try:
-                await new_channel.send(
-                    embed=discord.Embed(
-                        description=f"🎧 Canal de {member.mention}. Usa los botones para controlarlo.",
-                        color=0x2b2d31,
-                    ),
+                await send_via_webhook(
+                    new_channel,
+                    embed=_build_panel_embed(guild),
                     view=VoicePanel(),
                 )
             except discord.Forbidden:
