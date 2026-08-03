@@ -4,6 +4,7 @@ import asyncio
 import os
 import logging
 from config import db, DEFAULT_PREFIX
+from webhook_utils import send_via_webhook
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,6 +12,18 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 log = logging.getLogger("antinuke")
+
+
+class WebhookContext(commands.Context):
+    """Context que reenvía ctx.send() a través del webhook del bot.
+    En DMs no hay webhook posible, así que ahí se manda normal."""
+
+    async def send(self, content=None, **kwargs):
+        if self.guild is None:
+            return await super().send(content, **kwargs)
+        if content is not None:
+            kwargs["content"] = content
+        return await send_via_webhook(self.channel, **kwargs)
 
 
 class AntiNukeBot(commands.Bot):
@@ -38,6 +51,9 @@ class AntiNukeBot(commands.Bot):
         prefix = guild_data.get("prefix", DEFAULT_PREFIX)
         return commands.when_mentioned_or(prefix)(self, message)
 
+    async def get_context(self, message, *, cls=WebhookContext):
+        return await super().get_context(message, cls=cls)
+
     async def setup_hook(self):
         cogs = [
             "backup",
@@ -52,6 +68,7 @@ class AntiNukeBot(commands.Bot):
             "lockdown",
             "unban",
             "voice",
+            "autosetup",
         ]
         for cog in cogs:
             try:
@@ -60,6 +77,27 @@ class AntiNukeBot(commands.Bot):
             except Exception as e:
                 import traceback
                 log.error(f"Failed to load {cog}:\n{traceback.format_exc()}")
+
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+
+        if message.guild and message.content.strip() in (
+            f"<@{self.user.id}>", f"<@!{self.user.id}>"
+        ):
+            guild_data = db.get_guild(message.guild.id)
+            prefix = guild_data.get("prefix", DEFAULT_PREFIX)
+            embed = discord.Embed(
+                description=f"Mi prefijo en este servidor es `{prefix}`\n"
+                            f"Usa `{prefix}help` para ver todos los comandos.",
+                color=0x2b2d31,
+            )
+            if message.guild.icon:
+                embed.set_thumbnail(url=message.guild.icon.url)
+            await message.channel.send(embed=embed)  # respuesta normal, sin webhook
+            return
+
+        await self.process_commands(message)
 
     async def on_ready(self):
         log.info(f"Logged in as {self.user} ({self.user.id})")
