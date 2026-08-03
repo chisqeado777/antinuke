@@ -1,15 +1,15 @@
 """
-autosetup.py — Configura todo el bot automáticamente en un solo comando.
+autosetup.py — Configura el bot automáticamente.
 
 Comandos:
   ,autosetup normal   — preset equilibrado, pensado para la mayoría de servidores
   ,autosetup rapido    — protección máxima al instante, todo lo más estricto posible
+  ,setuplogs           — crea (o reutiliza) la categoría "logs" con sus 10 canales
+                         y los enlaza para que cada tipo de log llegue a su canal
 
-Ambos comandos:
-  1. Crean la categoría "logs" con los 10 canales (si no existen ya).
-  2. Enlazan cada canal a su categoría de log correspondiente.
-  3. Activan y configuran el AntiNuke con el preset elegido.
-  4. Muestran un embed con todo lo que se configuró.
+Son comandos independientes: puedes correr uno sin el otro. Si corres
+,autosetup sin haber corrido ,setuplogs antes, los logs caen de vuelta al
+canal legado (,setlogs) hasta que configures los canales dedicados.
 """
 
 import discord
@@ -70,14 +70,14 @@ async def _ensure_log_channels(guild: discord.Guild) -> dict[str, int]:
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         }
-        category = await guild.create_category(LOGS_CATEGORY_NAME, overwrites=overwrites, reason="AntiNuke: auto-configuración")
+        category = await guild.create_category(LOGS_CATEGORY_NAME, overwrites=overwrites, reason="AntiNuke: setup de logs")
 
     result = {}
     for cat_key, channel_name in LOG_CATEGORIES.items():
         existing = discord.utils.get(category.text_channels, name=channel_name)
         if existing is None:
             existing = await guild.create_text_channel(
-                channel_name, category=category, reason="AntiNuke: auto-configuración"
+                channel_name, category=category, reason="AntiNuke: setup de logs"
             )
         result[cat_key] = existing.id
     return result
@@ -87,6 +87,36 @@ class AutoSetup(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # ── ,setuplogs ───────────────────────────────────────────────────────────
+
+    @commands.command(name="setuplogs")
+    @commands.has_permissions(administrator=True)
+    async def setuplogs(self, ctx: commands.Context):
+        status_msg = await ctx.send(embed=discord.Embed(
+            description="Creando la categoría de logs...",
+            color=0x2b2d31,
+        ))
+
+        log_channels = await _ensure_log_channels(ctx.guild)
+
+        config = db.get_guild(ctx.guild.id)
+        config["log_channels"] = log_channels
+        config["log_channel"] = log_channels.get("mod")  # fallback legado
+        db.update_guild(ctx.guild.id, config)
+
+        embed = discord.Embed(
+            title="✅ Canales de logs listos",
+            description="Cada tipo de evento ahora se manda a su canal correspondiente.",
+            color=0x57f287,
+        )
+        channels_text = "\n".join(
+            f"`{cat}` → <#{cid}>" for cat, cid in log_channels.items()
+        )
+        embed.add_field(name="Canales", value=channels_text, inline=False)
+        await status_msg.edit(embed=embed)
+
+    # ── ,autosetup ───────────────────────────────────────────────────────────
+
     @commands.group(name="autosetup", invoke_without_command=True)
     @commands.has_permissions(administrator=True)
     async def autosetup(self, ctx: commands.Context):
@@ -95,7 +125,7 @@ class AutoSetup(commands.Cog):
             description=(
                 "`,autosetup normal` — preset equilibrado (recomendado)\n"
                 "`,autosetup rapido` — protección máxima al instante\n\n"
-                "Ambos crean automáticamente la categoría de logs con sus 10 canales."
+                "¿Todavía no tienes canales de logs? Usa `,setuplogs` para crearlos."
             ),
             color=0x2b2d31,
         )
@@ -118,13 +148,11 @@ class AutoSetup(commands.Cog):
             color=0x2b2d31,
         ))
 
-        log_channels = await _ensure_log_channels(ctx.guild)
-
         config = db.get_guild(ctx.guild.id)
-        config["log_channels"] = log_channels
-        config["log_channel"] = log_channels.get("mod")  # fallback legado
         config["antinuke"].update(preset)
         db.update_guild(ctx.guild.id, config)
+
+        has_log_channels = bool(config.get("log_channels"))
 
         # ── Embed resumen de todo lo que se configuró ──
         embed = discord.Embed(
@@ -143,10 +171,12 @@ class AutoSetup(commands.Cog):
             ),
             inline=False,
         )
-        channels_text = "\n".join(
-            f"`{cat}` → <#{cid}>" for cat, cid in log_channels.items()
-        )
-        embed.add_field(name="Canales de Logs Creados", value=channels_text, inline=False)
+        if not has_log_channels:
+            embed.add_field(
+                name="⚠️ Canales de logs",
+                value="Todavía no tienes canales dedicados. Usa `,setuplogs` para crearlos.",
+                inline=False,
+            )
         embed.set_footer(text="Usa ,antinuke status para ver la configuración completa en cualquier momento.")
 
         await status_msg.edit(embed=embed)
