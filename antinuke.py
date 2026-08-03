@@ -173,10 +173,30 @@ async def _punish(guild: discord.Guild, member: discord.Member, punishment: str)
 
 # ── Auto-unban ────────────────────────────────────────────────────────────────
 
+async def _get_invite_link(guild: discord.Guild) -> str | None:
+    """Genera (o reutiliza) una invitación para reenviar a usuarios desbaneados."""
+    try:
+        if guild.vanity_url_code:
+            return f"https://discord.gg/{guild.vanity_url_code}"
+        for channel in guild.text_channels:
+            perms = channel.permissions_for(guild.me)
+            if perms.create_instant_invite:
+                invite = await channel.create_invite(
+                    max_age=86400,  # 24 horas
+                    max_uses=1,
+                    reason="AntiNuke: invitación para usuario desbaneado",
+                )
+                return invite.url
+    except Exception as e:
+        log.warning(f"[{guild.name}] No se pudo generar invitación: {e}")
+    return None
+
+
 async def _auto_unban(guild: discord.Guild, nuke_detected_at: datetime, window: float = 30.0):
     """
     Unban all users that were banned within `window` seconds before nuke detection.
     Uses the in-memory ban log recorded by on_member_ban.
+    Avisa a cada usuario desbaneado por DM y le manda un enlace para volver a entrar.
     """
     cutoff = nuke_detected_at - timedelta(seconds=window)
     victims = [
@@ -188,10 +208,26 @@ async def _auto_unban(guild: discord.Guild, nuke_detected_at: datetime, window: 
 
     log.info(f"[{guild.name}] Auto-unban: {len(victims)} user(s) to unban.")
 
+    invite_url = await _get_invite_link(guild)
+
     async def _unban_one(uid: int):
         try:
-            user = await guild.fetch_ban(discord.Object(id=uid))
-            await guild.unban(user.user, reason="AntiNuke: reversing nuke ban")
+            ban_entry = await guild.fetch_ban(discord.Object(id=uid))
+            user = ban_entry.user
+            await guild.unban(user, reason="AntiNuke: revirtiendo baneo no autorizado")
+            try:
+                embed = discord.Embed(
+                    description=(
+                        f"Tu baneo en **{guild.name}** fue revertido automáticamente "
+                        f"por el sistema AntiNuke, ya que se detectó como no autorizado.\n\n"
+                        f"Ya puedes volver a entrar al servidor."
+                        + (f"\n\n{invite_url}" if invite_url else "")
+                    ),
+                    color=0x57f287,
+                )
+                await user.send(embed=embed)
+            except discord.Forbidden:
+                pass  # el usuario tiene los DMs cerrados
         except discord.NotFound:
             pass
         except Exception as e:
@@ -214,6 +250,7 @@ async def _handle_event(
     window_key: str,
     module_label: str,
     reason: str,
+    category: str = "mod",
     extra_fields: list | None = None,
 ):
     """Central handler called by every event."""
@@ -262,6 +299,7 @@ async def _handle_event(
             moderator=guild.me,
             reason=reason,
             module=module_label,
+            category=category,
             extra_fields=extra_fields,
         )),
         asyncio.create_task(_auto_unban(guild, nuke_detected_at)),
@@ -317,8 +355,9 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_ban", "ban", "ban_threshold", "ban_window",
             "Anti-Ban",
-            "Exceeded ban threshold",
-            extra_fields=[("Banned User", f"`{user}` (`{user.id}`)", False)],
+            "Superó el límite de baneos permitidos",
+            category="mod",
+            extra_fields=[("Usuario Baneado", f"`{user}` (`{user.id}`)", False)],
         )
 
     # ── ANTI-KICK ─────────────────────────────────────────────────────────────
@@ -333,8 +372,9 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_kick", "kick", "kick_threshold", "kick_window",
             "Anti-Kick",
-            "Exceeded kick threshold",
-            extra_fields=[("Kicked User", f"`{member}` (`{member.id}`)", False)],
+            "Superó el límite de expulsiones permitidas",
+            category="mod",
+            extra_fields=[("Usuario Expulsado", f"`{member}` (`{member.id}`)", False)],
         )
 
     # ── ANTI-CHANNEL DELETE ───────────────────────────────────────────────────
@@ -347,9 +387,10 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_channel_delete", "channel_delete",
             "channel_delete_threshold", "channel_delete_window",
-            "Anti-Channel Delete",
-            "Exceeded channel deletion threshold",
-            extra_fields=[("Deleted Channel", f"`#{channel.name}`", False)],
+            "Anti-Eliminación de Canales",
+            "Superó el límite de canales eliminados",
+            category="channels",
+            extra_fields=[("Canal Eliminado", f"`#{channel.name}`", False)],
         )
 
     # ── ANTI-CHANNEL CREATE ───────────────────────────────────────────────────
@@ -362,9 +403,10 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_channel_create", "channel_create",
             "channel_create_threshold", "channel_create_window",
-            "Anti-Channel Create",
-            "Exceeded channel creation threshold",
-            extra_fields=[("Created Channel", f"`#{channel.name}`", False)],
+            "Anti-Creación de Canales",
+            "Superó el límite de canales creados",
+            category="channels",
+            extra_fields=[("Canal Creado", f"`#{channel.name}`", False)],
         )
 
     # ── ANTI-ROLE DELETE ──────────────────────────────────────────────────────
@@ -377,9 +419,10 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_role_delete", "role_delete",
             "role_delete_threshold", "role_delete_window",
-            "Anti-Role Delete",
-            "Exceeded role deletion threshold",
-            extra_fields=[("Deleted Role", f"`{role.name}`", False)],
+            "Anti-Eliminación de Roles",
+            "Superó el límite de roles eliminados",
+            category="roles",
+            extra_fields=[("Rol Eliminado", f"`{role.name}`", False)],
         )
 
     # ── ANTI-ROLE CREATE ──────────────────────────────────────────────────────
@@ -392,9 +435,10 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_role_create", "role_create",
             "role_create_threshold", "role_create_window",
-            "Anti-Role Create",
-            "Exceeded role creation threshold",
-            extra_fields=[("Created Role", f"`{role.name}`", False)],
+            "Anti-Creación de Roles",
+            "Superó el límite de roles creados",
+            category="roles",
+            extra_fields=[("Rol Creado", f"`{role.name}`", False)],
         )
 
     # ── ANTI-WEBHOOK ──────────────────────────────────────────────────────────
@@ -408,8 +452,9 @@ class AntiNuke(commands.Cog):
             "anti_webhook", "webhook_create",
             "webhook_create_threshold", "webhook_create_window",
             "Anti-Webhook",
-            "Exceeded webhook creation threshold",
-            extra_fields=[("Channel", f"`#{channel.name}`", False)],
+            "Superó el límite de webhooks creados",
+            category="channels",
+            extra_fields=[("Canal", f"`#{channel.name}`", False)],
         )
 
     # ── ANTI-MENTION SPAM ─────────────────────────────────────────────────────
@@ -440,8 +485,9 @@ class AntiNuke(commands.Cog):
                             action=an.get("punishment", "ban"),
                             target=executor,
                             moderator=guild.me,
-                            reason="Used @everyone / @here mention",
-                            module="Anti-Everyone Mention",
+                            reason="Usó una mención @everyone / @here",
+                            module="Anti-Mención Everyone",
+                            category="messages",
                         ))
                         try:
                             await message.delete()
@@ -469,9 +515,10 @@ class AntiNuke(commands.Cog):
                         action=an.get("punishment", "ban"),
                         target=executor,
                         moderator=guild.me,
-                        reason=f"Mass mention spam ({mentions} mentions)",
-                        module="Anti-Mention Spam",
-                        extra_fields=[("Mentions", str(mentions), True)],
+                        reason=f"Spam de menciones masivas ({mentions} menciones)",
+                        module="Anti-Spam de Menciones",
+                        category="messages",
+                        extra_fields=[("Menciones", str(mentions), True)],
                     ))
                     try:
                         await message.delete()
@@ -499,9 +546,10 @@ class AntiNuke(commands.Cog):
                     action=an.get("punishment", "ban"),
                     target=executor,
                     moderator=guild.me,
-                    reason="Unauthorized bot added to server",
+                    reason="Bot agregado sin autorización al servidor",
                     module="Anti-Bot Add",
-                    extra_fields=[("Bot Added", f"`{member}` (`{member.id}`)", False)],
+                    category="members",
+                    extra_fields=[("Bot Agregado", f"`{member}` (`{member.id}`)", False)],
                 ))
 
         # Account age check
@@ -516,11 +564,12 @@ class AntiNuke(commands.Cog):
                         action="kick",
                         target=member,
                         moderator=guild.me,
-                        reason=f"Account age below minimum ({age}/{min_age} days)",
-                        module="Anti-New Account",
+                        reason=f"Edad de cuenta por debajo del mínimo ({age}/{min_age} días)",
+                        module="Anti-Cuenta Nueva",
+                        category="members",
                         extra_fields=[
-                            ("Account Age", f"`{age} days`", True),
-                            ("Minimum Required", f"`{min_age} days`", True),
+                            ("Edad de la Cuenta", f"`{age} días`", True),
+                            ("Mínimo Requerido", f"`{min_age} días`", True),
                         ],
                     ))
                 except Exception:
@@ -542,9 +591,9 @@ class AntiNuke(commands.Cog):
             return
         changes = []
         if before.name != after.name:
-            changes.append(f"Name: `{before.name}` → `{after.name}`")
+            changes.append(f"Nombre: `{before.name}` → `{after.name}`")
         if before.icon != after.icon:
-            changes.append("Icon changed")
+            changes.append("Ícono cambiado")
         if before.vanity_url_code != after.vanity_url_code:
             changes.append(f"Vanity: `{before.vanity_url_code}` → `{after.vanity_url_code}`")
         if not changes:
@@ -555,9 +604,10 @@ class AntiNuke(commands.Cog):
             action=an.get("punishment", "ban"),
             target=executor,
             moderator=guild.me,
-            reason="Unauthorized server update",
-            module="Anti-Server Update",
-            extra_fields=[("Changes", "\n".join(changes), False)],
+            reason="Actualización no autorizada del servidor",
+            module="Anti-Actualización del Servidor",
+            category="mod",
+            extra_fields=[("Cambios", "\n".join(changes), False)],
         ))
 
     # ── ANTI-PRUNE ────────────────────────────────────────────────────────────
@@ -583,8 +633,9 @@ class AntiNuke(commands.Cog):
                 action=an.get("punishment", "ban"),
                 target=executor,
                 moderator=guild.me,
-                reason="Unauthorized member prune",
+                reason="Expulsión masiva (prune) no autorizada",
                 module="Anti-Prune",
+                category="members",
             ))
 
     # ── ANTI-EMOJI DELETE ─────────────────────────────────────────────────────
@@ -603,9 +654,10 @@ class AntiNuke(commands.Cog):
             guild, executor, self.bot,
             "anti_emoji_delete", "emoji_delete",
             "emoji_delete_threshold", "emoji_delete_window",
-            "Anti-Emoji Delete",
-            f"Bulk emoji deletion ({deleted} emojis)",
-            extra_fields=[("Deleted", f"`{deleted} emojis`", True)],
+            "Anti-Eliminación de Emojis",
+            f"Eliminación masiva de emojis ({deleted} emojis)",
+            category="emojis",
+            extra_fields=[("Eliminados", f"`{deleted} emojis`", True)],
         )
 
     # ── ANTI-ROLE PERMISSIONS UPDATE ──────────────────────────────────────────
@@ -632,11 +684,12 @@ class AntiNuke(commands.Cog):
             action=an.get("punishment", "ban"),
             target=executor,
             moderator=guild.me,
-            reason="Dangerous permissions granted to role",
-            module="Anti-Role Permissions",
+            reason="Permisos peligrosos otorgados a un rol",
+            module="Anti-Permisos de Rol",
+            category="roles",
             extra_fields=[
-                ("Role", f"`{after.name}`", True),
-                ("Permissions Granted", ", ".join(f"`{p}`" for p in gained), False),
+                ("Rol", f"`{after.name}`", True),
+                ("Permisos Otorgados", ", ".join(f"`{p}`" for p in gained), False),
             ],
         ))
 
