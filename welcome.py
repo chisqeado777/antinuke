@@ -1,134 +1,26 @@
 """
-welcome.py — Sistema de bienvenida con sintaxis $v{} compatible con Bender.
+welcome.py — Sistema de bienvenida con sintaxis $v{} (motor compartido en
+embed_scripting.py, el mismo que usan ,createembed / ,editembed).
 
 Comandos:
   ,welcome add #canal {embed}$v{message: ...}$v{author: ...}$v{description: ...}
-                       $v{thumbnail: {user.avatar}}$v{button: url && texto && /e && enabled}
+                       $v{thumbnail: {user.avatar}}$v{button: url && texto && emoji && enabled}
   ,welcome list                 — ver entradas activas
   ,welcome remove <n>           — eliminar entrada por número
   ,welcome test                 — previsualizar con tu usuario
   ,welcome off                  — desactivar todos los welcomes de este servidor
 
-Variables disponibles: {user.mention} {user.tag} {user.avatar} {guild.count}
+Variables disponibles: ver embed_scripting.py (user.*, guild.*, channel.*)
 """
 
 import discord
 from discord.ext import commands
 from config import db
 import logging
+from webhook_utils import send_via_webhook
+from embed_scripting import parse_code, build_message
 
 log = logging.getLogger("antinuke.welcome")
-
-
-# ── Parser de sintaxis $v{key: value} ────────────────────────────────────────
-
-def _extract_vblocks(text: str) -> list[str]:
-    """
-    Extrae el contenido interior de cada bloque $v{...}, respetando
-    llaves anidadas (ej: {user.mention} dentro de $v{message: ...}).
-    """
-    blocks = []
-    i = 0
-    while i < len(text):
-        start = text.find("$v{", i)
-        if start == -1:
-            break
-        depth = 0
-        j = start + 2  # apunta a '{'
-        while j < len(text):
-            if text[j] == '{':
-                depth += 1
-            elif text[j] == '}':
-                depth -= 1
-                if depth == 0:
-                    blocks.append(text[start + 3:j])
-                    i = j + 1
-                    break
-            j += 1
-        else:
-            break
-    return blocks
-
-
-def _parse_vargs(text: str) -> dict:
-    """
-    Extrae todos los bloques $v{key: value} del texto.
-    Retorna dict con las claves encontradas.
-    Soporta múltiples 'button' → lista.
-    """
-    result = {"buttons": []}
-    for block in _extract_vblocks(text):
-        # Separar key: value en el primer ':'
-        if ':' not in block:
-            continue
-        key, _, value = block.partition(':')
-        key = key.strip().lower()
-        value = value.strip()
-
-        if key == "button":
-            # formato: url && texto && /emoji && enabled
-            parts = [p.strip() for p in value.split("&&")]
-            # parts[0]=url, parts[1]=texto, parts[2]=emoji_o_path, parts[3]=enabled
-            url = parts[0] if len(parts) > 0 else ""
-            label = parts[1] if len(parts) > 1 else "Click"
-            enabled = "enabled" in value.lower()
-            if enabled and url:
-                result["buttons"].append({"url": url, "label": label})
-            elif enabled and not url:
-                # botón sin url (guild.count style) — lo ignoramos, no soportado por discord.py sin url
-                pass
-        else:
-            result[key] = value
-    return result
-
-
-def _resolve_vars(text: str, member: discord.Member) -> str:
-    """Reemplaza {user.mention}, {user.tag}, {user.avatar}, {guild.count}, {guild.name}."""
-    return (
-        text
-        .replace("{user.mention}", member.mention)
-        .replace("{user.tag}", str(member))
-        .replace("{user.avatar}", member.display_avatar.url)
-        .replace("{guild.count}", str(member.guild.member_count))
-        .replace("{guild.name}", member.guild.name)
-    )
-
-
-def _build_embed(entry: dict, member: discord.Member) -> tuple[discord.Embed, str, list[discord.ui.Button]]:
-    """Construye embed + content + botones a partir de una entrada guardada."""
-    # Content (mensaje fuera del embed)
-    content = _resolve_vars(entry.get("message", ""), member) if entry.get("message") else None
-
-    # Embed
-    embed = discord.Embed(color=0x2b2d31)
-
-    author_raw = entry.get("author", "")
-    if author_raw:
-        # formato: "texto && url_icono" — el && separa texto de icon_url opcional
-        parts = [p.strip() for p in author_raw.split("&&")]
-        author_text = _resolve_vars(parts[0], member)
-        icon_url = parts[1] if len(parts) > 1 and parts[1].startswith("http") else None
-        embed.set_author(name=author_text, icon_url=icon_url)
-
-    desc_raw = entry.get("description", "")
-    if desc_raw:
-        embed.description = _resolve_vars(desc_raw, member)
-
-    thumb_raw = entry.get("thumbnail", "")
-    if thumb_raw:
-        resolved = _resolve_vars(thumb_raw, member)
-        if resolved.startswith("http"):
-            embed.set_thumbnail(url=resolved)
-
-    # Botones
-    buttons = []
-    for btn in entry.get("buttons", []):
-        url = _resolve_vars(btn["url"], member)
-        label = _resolve_vars(btn["label"], member)
-        if url.startswith("http"):
-            buttons.append(discord.ui.Button(label=label, url=url, style=discord.ButtonStyle.link))
-
-    return embed, content, buttons
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -146,6 +38,20 @@ def _save_welcomes(guild_id: int, entries: list):
 
 # ── Cog ──────────────────────────────────────────────────────────────────────
 
+def _get_parsed(entry: dict) -> dict:
+    """Compatibilidad: entradas viejas guardaban campos sueltos en vez de 'parsed'."""
+    if "parsed" in entry:
+        return entry["parsed"]
+    return {
+        "message": entry.get("message", ""),
+        "author": entry.get("author", ""),
+        "description": entry.get("description", ""),
+        "thumbnail": entry.get("thumbnail", ""),
+        "buttons": entry.get("buttons", []),
+        "fields": [],
+    }
+
+
 class Welcome(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -161,16 +67,17 @@ class Welcome(commands.Cog):
             if not channel:
                 continue
 
-            embed, content, buttons = _build_embed(entry, member)
+            embed, content, view = build_message(_get_parsed(entry), member=member)
 
             try:
-                if buttons:
-                    view = discord.ui.View()
-                    for btn in buttons:
-                        view.add_item(btn)
-                    await channel.send(content=content, embed=embed, view=view)
-                else:
-                    await channel.send(content=content, embed=embed)
+                kwargs = {}
+                if content:
+                    kwargs["content"] = content
+                if embed:
+                    kwargs["embed"] = embed
+                if view:
+                    kwargs["view"] = view
+                await send_via_webhook(channel, **kwargs)
             except discord.Forbidden:
                 log.warning(f"[{member.guild.name}] Sin permisos para mandar welcome en {channel.name}")
             except Exception as e:
@@ -192,16 +99,9 @@ class Welcome(commands.Cog):
         Ejemplo:
           ,welcome add #chat {embed}$v{message: {user.mention}}$v{author: welcome, {user.tag}!}$v{description: hola}$v{thumbnail: {user.avatar}}
         """
-        parsed = _parse_vargs(config_text)
+        parsed = parse_code(config_text)
 
-        entry = {
-            "channel_id": channel.id,
-            "message": parsed.get("message", ""),
-            "author": parsed.get("author", ""),
-            "description": parsed.get("description", ""),
-            "thumbnail": parsed.get("thumbnail", ""),
-            "buttons": parsed.get("buttons", []),
-        }
+        entry = {"channel_id": channel.id, "parsed": parsed}
 
         entries = _get_welcomes(ctx.guild.id)
         entries.append(entry)
@@ -265,15 +165,16 @@ class Welcome(commands.Cog):
 
         # Previsualiza la primera entrada en el canal actual
         entry = entries[0]
-        embed, content, buttons = _build_embed(entry, ctx.author)
+        embed, content, view = build_message(_get_parsed(entry), member=ctx.author)
 
-        if buttons:
-            view = discord.ui.View()
-            for btn in buttons:
-                view.add_item(btn)
-            await ctx.send(content=content, embed=embed, view=view)
-        else:
-            await ctx.send(content=content, embed=embed)
+        kwargs = {}
+        if content:
+            kwargs["content"] = content
+        if embed:
+            kwargs["embed"] = embed
+        if view:
+            kwargs["view"] = view
+        await ctx.send(**kwargs)
 
     @welcome.command(name="off")
     @commands.has_permissions(manage_guild=True)
