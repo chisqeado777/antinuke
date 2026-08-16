@@ -160,6 +160,17 @@ CATEGORIES = {
             (",unbanall", "Desbanea a todos los usuarios baneados del servidor"),
         ],
     },
+    "embeds": {
+        "label": "Embeds Personalizados",
+        "emoji": "🖼️",
+        "description": "Crea y edita embeds con el mismo motor de sintaxis que usan las bienvenidas.",
+        "commands": [
+            (",createembed <código>", "Crea y envía un embed personalizado en el canal actual"),
+            (",editembed <link_mensaje> <código>", "Edita un embed que el bot mandó antes"),
+            ("Sintaxis", "`{embed}$v{title: ...}$v{description: ...}$v{color: #hex}$v{field: nombre && valor && inline}`"),
+            ("Variables", "`{user.mention}` `{user.tag}` `{guild.name}` `{guild.count}` `{channel.mention}` y más"),
+        ],
+    },
     "backup": {
         "label": "Respaldo",
         "emoji": "💾",
