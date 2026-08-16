@@ -5,71 +5,260 @@ import logging
 
 log = logging.getLogger("antinuke.help")
 
-# ── Command reference table ───────────────────────────────────────────────────
+# ── Tabla de comandos ──────────────────────────────────────────────────────
 
 CATEGORIES = {
-    "AntiNuke": {
-        "description": "Core protection engine — enable, disable, and tune every module.",
+    "antinuke": {
+        "label": "AntiNuke",
+        "emoji": "🛡️",
+        "description": "Motor de protección principal — activa, desactiva y ajusta cada módulo.",
         "commands": [
-            (",antinuke enable", "Activate protection on this server"),
-            (",antinuke disable", "Deactivate protection on this server"),
-            (",antinuke status", "Show full configuration overview"),
-            (",antinuke punishment <type>", "Set response action: `ban` `kick` `strip` `mute`"),
-            (",antinuke module <name> <on/off>", "Toggle a specific module"),
-            (",antinuke threshold <module> <n>", "How many actions before triggering (per window)"),
-            (",antinuke window <module> <sec>", "Time window in seconds for the rate-limit"),
-            (",antinuke accountage <days>", "Min account age to join (0 = disabled)"),
-            (",antinuke guildage <days>", "Min days in guild before actions are trusted (0 = off)"),
-            (",antinuke reset", "Reset config to defaults *(bot owner)*"),
+            (",antinuke enable", "Activa la protección en este servidor"),
+            (",antinuke disable", "Desactiva la protección en este servidor"),
+            (",antinuke status", "Muestra la configuración completa actual"),
+            (",antinuke punishment <tipo>", "Sanción a aplicar: `ban` `kick` `strip` `mute`"),
+            (",antinuke module <nombre> <on/off>", "Activa o desactiva un módulo específico"),
+            (",antinuke threshold <módulo> <n>", "Cuántas acciones antes de disparar la protección"),
+            (",antinuke window <módulo> <seg>", "Ventana de tiempo en segundos para el límite"),
+            (",antinuke accountage <días>", "Edad mínima de cuenta para unirse (0 = desactivado)"),
+            (",antinuke guildage <días>", "Días mínimos en el server para confiar en sus acciones (0 = off)"),
+            (",antinuke reset", "Reinicia la configuración a valores por defecto *(solo owner)*"),
         ],
     },
-    "Modules": {
-        "description": "Available protection modules that can be toggled independently.",
+    "modulos": {
+        "label": "Módulos",
+        "emoji": "🧩",
+        "description": "Módulos de protección disponibles, activables por separado.",
         "commands": [
-            ("ban", "Detects mass ban attacks"),
-            ("kick", "Detects mass kick attacks"),
-            ("channeldelete", "Detects channel mass deletion"),
-            ("channelcreate", "Detects channel spam creation"),
-            ("roledelete", "Detects role mass deletion"),
-            ("rolecreate", "Detects role spam creation"),
-            ("webhook", "Detects unauthorized webhook creation"),
-            ("mention", "Detects mention spam / mass pings"),
-            ("emojidelete", "Detects bulk emoji deletion"),
-            ("botadd", "Blocks unauthorized bot additions"),
-            ("everyone", "Blocks unauthorized @everyone/@here mentions"),
-            ("serverupdate", "Blocks unauthorized server name/icon changes"),
-            ("prune", "Blocks unauthorized member prunes"),
+            ("ban", "Detecta ataques de baneo masivo"),
+            ("kick", "Detecta ataques de expulsión masiva"),
+            ("channeldelete", "Detecta eliminación masiva de canales"),
+            ("channelcreate", "Detecta creación en cadena de canales"),
+            ("roledelete", "Detecta eliminación masiva de roles"),
+            ("rolecreate", "Detecta creación en cadena de roles"),
+            ("webhook", "Detecta creación no autorizada de webhooks"),
+            ("mention", "Detecta spam de menciones masivas"),
+            ("emojidelete", "Detecta eliminación masiva de emojis"),
+            ("botadd", "Bloquea la adición no autorizada de bots"),
+            ("everyone", "Bloquea menciones no autorizadas a @everyone/@here"),
+            ("serverupdate", "Bloquea cambios no autorizados de nombre/ícono del server"),
+            ("prune", "Bloquea expulsiones masivas (prune) no autorizadas"),
         ],
     },
-    "Whitelist": {
-        "description": "Users on the whitelist are completely exempt from AntiNuke detection.",
+    "whitelist": {
+        "label": "Whitelist",
+        "emoji": "✅",
+        "description": "Los usuarios en whitelist están completamente exentos de la detección AntiNuke.",
         "commands": [
-            (",whitelist", "Show whitelisted users"),
-            (",whitelist add <user>","Add a user to the whitelist *(owner only)*"),
-            (",whitelist remove <user>","Remove a user from the whitelist *(owner only)*"),
-            (",whitelist clear", "Remove everyone from the whitelist *(owner only)*"),
-            (",whitelist check <user>","Check if a user is whitelisted"),
+            (",whitelist", "Muestra los usuarios en whitelist"),
+            (",whitelist add <usuario>", "Agrega un usuario a la whitelist *(solo owner)*"),
+            (",whitelist remove <usuario>", "Quita un usuario de la whitelist *(solo owner)*"),
+            (",whitelist clear", "Vacía toda la whitelist *(solo owner)*"),
+            (",whitelist check <usuario>", "Verifica si un usuario está en whitelist"),
         ],
     },
-    "Logs & Settings": {
-        "description": "Configure log channels, prefixes, and embed appearance.",
+    "logs": {
+        "label": "Logs y Configuración",
+        "emoji": "📋",
+        "description": "Configura el canal de logs legado, el prefijo y la apariencia de los embeds.",
         "commands": [
-            (",setlogs [#channel]", "Set log channel (omit to clear)"),
-            (",setprefix <prefix>", "Change the command prefix"),
-            (",logembed color <hex>", "Change log embed color (e.g. `#a855f7`)"),
-            (",logembed footer <text>", "Set footer text (supports server emojis)"),
-            (",logembed thumbnail <on/off>","Toggle server icon thumbnail in logs"),
+            (",setlogs [#canal]", "Canal de logs único legado (omite el canal para quitarlo)"),
+            (",setprefix <prefijo>", "Cambia el prefijo de comandos"),
+            (",logembed color <hex>", "Color de los embeds de log (ej. `#a855f7`)"),
+            (",logembed footer <texto>", "Texto del footer (soporta emojis del server)"),
+            (",logembed thumbnail <on/off>", "Muestra/oculta el ícono del server en los logs"),
         ],
     },
-    "VC Tracker": {
-        "description": "Tracks how many people are in voice channels and announces milestones.",
+    "autosetup": {
+        "label": "Auto-Configuración",
+        "emoji": "⚡",
+        "description": "Configura todo el bot en segundos, con presets o canales de logs automáticos.",
         "commands": [
-            (",setvc channel <#channel>", "Set where automatic VC alerts are sent"),
-            (",setvc threshold <n>", "Announce every time the VC count crosses a multiple of n"),
-            (",vcstats", "Show the current number of people in voice channels right now"),
+            (",setuplogs", "Crea (o reutiliza) la categoría de logs con sus 10 canales y los enlaza"),
+            (",autosetup normal", "Preset equilibrado: sanciones con margen, pensado para el día a día"),
+            (",autosetup rapido", "Protección máxima al instante: castiga a la primera acción sospechosa"),
+        ],
+    },
+    "vc": {
+        "label": "VC Tracker",
+        "emoji": "🎚️",
+        "description": "Rastrea cuánta gente hay en canales de voz y anuncia hitos.",
+        "commands": [
+            (",setvc channel <#canal>", "Canal donde se mandan las alertas automáticas de voz"),
+            (",setvc threshold <n>", "Anuncia cada vez que se cruza un múltiplo de n personas"),
+            (",vcstats", "Muestra cuánta gente hay ahora mismo en canales de voz"),
+        ],
+    },
+    "voz": {
+        "label": "Voz Temporal",
+        "emoji": "🎙️",
+        "description": "Canales de voz temporales tipo Join-to-Create, con panel de botones incluido.",
+        "commands": [
+            (",voiceset setup <categoría>", "Crea la categoría y el canal hub para generar VCs"),
+            (",voiceset hub <#canal_voz>", "Usa un canal de voz existente como hub"),
+            (",voiceset off", "Desactiva el sistema de voz temporal"),
+            (",voice rename <nombre>", "Renombra tu canal de voz temporal"),
+            (",voice limit <n>", "Cambia el límite de usuarios de tu canal"),
+            ("Panel de botones", "Se manda solo al crear tu VC: bloquear, ocultar, reclamar, y más"),
+        ],
+    },
+    "bienvenidas": {
+        "label": "Bienvenidas",
+        "emoji": "👋",
+        "description": "Mensajes de bienvenida personalizados, con embeds, botones y variables.",
+        "commands": [
+            (",welcome add <#canal> <config>", "Agrega un mensaje de bienvenida en un canal"),
+            (",welcome list", "Lista todas las bienvenidas configuradas"),
+            (",welcome remove <n>", "Elimina la bienvenida número n"),
+            (",welcome test", "Envía una bienvenida de prueba"),
+            (",welcome off", "Desactiva todas las bienvenidas"),
+        ],
+    },
+    "invitaciones": {
+        "label": "Invitaciones",
+        "emoji": "📨",
+        "description": "Rastrea cuántas invitaciones trae cada miembro y recompensa a los que más invitan.",
+        "commands": [
+            (",setinvite channel <#canal>", "Canal donde se anuncian los hitos de invitaciones"),
+            (",setinvite threshold <n> [recompensa]", "Define un umbral de invitaciones y su recompensa"),
+            (",setinvite altdays <días>", "Días para considerar una cuenta como alt"),
+            (",invites [usuario]", "Muestra cuántas invitaciones tiene alguien (o tú)"),
+            (",invitetop", "Top de usuarios con más invitaciones"),
+            (",resetinvites", "Reinicia el conteo de invitaciones del servidor"),
+        ],
+    },
+    "giveaways": {
+        "label": "Giveaways",
+        "emoji": "🎉",
+        "description": "Sorteos con botón de participación, bonus de probabilidad y reroll.",
+        "commands": [
+            (",gcreate <#canal> <duración> <premio>", "Crea un sorteo"),
+            (",gend <id_mensaje>", "Termina un sorteo antes de tiempo"),
+            (",greroll <id_mensaje>", "Rifa de nuevo un ganador"),
+            (",gbonus <usuario> <porcentaje>", "Da a un usuario un % extra de probabilidad"),
+            (",gbonus remove <usuario>", "Quita el bonus de un usuario"),
+            (",gbonus list", "Lista todos los bonus activos"),
+        ],
+    },
+    "lockdown": {
+        "label": "Lockdown",
+        "emoji": "🔒",
+        "description": "Bloquea el servidor por completo al instante ante un ataque.",
+        "commands": [
+            (",lockdown", "Bloquea el servidor (impide que @everyone escriba)"),
+            (",unlock", "Desbloquea el servidor"),
+            (",lockdown exempt add <canal>", "Agrega un canal exento del lockdown"),
+            (",lockdown exempt remove <canal>", "Quita un canal exento"),
+            (",lockdown exempt list", "Lista los canales exentos"),
+        ],
+    },
+    "desbaneos": {
+        "label": "Desbaneos",
+        "emoji": "🔨",
+        "description": "Herramientas de moderación para revertir baneos masivos.",
+        "commands": [
+            (",unbanall", "Desbanea a todos los usuarios baneados del servidor"),
+        ],
+    },
+    "backup": {
+        "label": "Respaldo",
+        "emoji": "💾",
+        "description": "Copias de seguridad del servidor para restaurar canales y roles tras un ataque.",
+        "commands": [
+            (",backup snapshot", "Fuerza una copia de seguridad ahora *(solo owner del bot)*"),
+            (",backup restore", "Restaura el servidor desde la última copia *(solo owner del bot)*"),
+            (",backup status", "Muestra info de la última copia guardada"),
         ],
     },
 }
+
+ALIASES = {
+    "modules": "modulos", "módulos": "modulos",
+    "log": "logs", "settings": "logs",
+    "setup": "autosetup", "auto": "autosetup", "autoconfig": "autosetup",
+    "vctracker": "vc", "voicechannel": "vc",
+    "voice": "voz", "voicemaster": "voz",
+    "welcome": "bienvenidas",
+    "invites": "invitaciones", "invite": "invitaciones",
+    "giveaway": "giveaways", "sorteos": "giveaways", "sorteo": "giveaways",
+    "unban": "desbaneos",
+    "respaldo": "backup",
+}
+
+
+def _build_overview_embed(guild: discord.Guild, prefix: str) -> discord.Embed:
+    e = discord.Embed(
+        description=(
+            "**AntiNuke** — protección profesional para tu servidor.\n"
+            f"Usa `{prefix}help <categoría>` o el menú de abajo para ver los comandos de cada sección.\n\u200b"
+        ),
+        color=0x2b2d31,
+    )
+    e.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+    if guild.icon:
+        e.set_thumbnail(url=guild.icon.url)
+
+    for key, data in CATEGORIES.items():
+        count = len(data["commands"])
+        e.add_field(
+            name=f"{data['emoji']} {data['label']} — `{count} comandos`",
+            value=data["description"],
+            inline=False,
+        )
+
+    e.set_footer(text=f"Prefijo: {prefix} · Todos los horarios en UTC")
+    return e
+
+
+def _build_category_embed(guild: discord.Guild, prefix: str, cat_key: str) -> discord.Embed:
+    data = CATEGORIES[cat_key]
+    e = discord.Embed(
+        title=f"{data['emoji']} {data['label']}",
+        description=data["description"] + "\n\u200b",
+        color=0x2b2d31,
+    )
+    e.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+    if guild.icon:
+        e.set_thumbnail(url=guild.icon.url)
+
+    lines = [f"`{cmd}`\n{desc}" for cmd, desc in data["commands"]]
+    half = (len(lines) + 1) // 2
+    left = "\n\n".join(lines[:half])
+    right = "\n\n".join(lines[half:])
+
+    if right:
+        e.add_field(name="\u200b", value=left, inline=True)
+        e.add_field(name="\u200b", value=right, inline=True)
+    else:
+        e.add_field(name="\u200b", value=left, inline=False)
+
+    e.set_footer(text=f"Prefijo: {prefix} · <obligatorio> [opcional]")
+    return e
+
+
+class CategorySelect(discord.ui.Select):
+    def __init__(self, guild: discord.Guild, prefix: str):
+        self.guild = guild
+        self.prefix = prefix
+        options = [
+            discord.SelectOption(label=data["label"], value=key, emoji=data["emoji"])
+            for key, data in CATEGORIES.items()
+        ]
+        super().__init__(placeholder="📖 Elige una categoría para ver sus comandos...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        embed = _build_category_embed(self.guild, self.prefix, self.values[0])
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class HelpView(discord.ui.View):
+    def __init__(self, guild: discord.Guild, prefix: str):
+        super().__init__(timeout=180)
+        self.add_item(CategorySelect(guild, prefix))
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
 
 
 class Help(commands.Cog):
@@ -78,101 +267,31 @@ class Help(commands.Cog):
 
     @commands.command(name="help", aliases=["h", "commands"])
     async def help_command(self, ctx, *, category: str = None):
-        """Show help for all commands or a specific category."""
+        """Muestra la ayuda general o de una categoría específica."""
         config = db.get_guild(ctx.guild.id)
         prefix = config.get("prefix", ",")
 
         if category is None:
-            await self._send_overview(ctx, prefix)
-        else:
-            await self._send_category(ctx, prefix, category)
+            embed = _build_overview_embed(ctx.guild, prefix)
+            view = HelpView(ctx.guild, prefix)
+            await ctx.send(embed=embed, view=view)
+            return
 
-    async def _send_overview(self, ctx, prefix):
-        guild = ctx.guild
-        e = discord.Embed(
-            description=(
-                "**AntiNuke** — professional server protection.\n"
-                f"Use `{prefix}help <category>` to see detailed commands.\n\u200b"
-            ),
-            color=0x2b2d31,
-        )
-        e.set_author(
-            name=guild.name,
-            icon_url=guild.icon.url if guild.icon else None,
-        )
-        if guild.icon:
-            e.set_thumbnail(url=guild.icon.url)
+        cat_key = category.lower().strip()
+        cat_key = ALIASES.get(cat_key, cat_key)
 
-        for name, data in CATEGORIES.items():
-            count = len(data["commands"])
-            e.add_field(
-                name=f"{name} — `{count} commands`",
-                value=data["description"],
-                inline=False,
-            )
-
-        e.add_field(
-            name="\u200b",
-            value=(
-                f"`{prefix}help antinuke` · `{prefix}help modules` · "
-                f"`{prefix}help whitelist` · `{prefix}help logs` · `{prefix}help vc`"
-            ),
-            inline=False,
-        )
-        e.set_footer(text=f"Prefix: {prefix} · All times UTC")
-        await ctx.send(embed=e)
-
-    async def _send_category(self, ctx, prefix, category: str):
-        guild = ctx.guild
-        cat_key = None
-        category_lower = category.lower()
-
-        for key in CATEGORIES:
-            if category_lower in key.lower() or category_lower in ["log", "logs", "settings"] and key == "Logs & Settings":
-                cat_key = key
-                break
-            if category_lower in ["vc", "vctracker", "voice", "voicechannel"] and key == "VC Tracker":
-                cat_key = key
-                break
-
-        if cat_key is None:
+        if cat_key not in CATEGORIES:
+            available = " · ".join(f"`{k}`" for k in CATEGORIES)
             e = discord.Embed(
-                description=(
-                    f"Category `{category}` not found.\n"
-                    f"Available: `antinuke` · `modules` · `whitelist` · `logs` · `vc`"
-                ),
+                description=f"Categoría `{category}` no encontrada.\nDisponibles: {available}",
                 color=0x2b2d31,
             )
-            e.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            e.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
             return await ctx.send(embed=e)
 
-        data = CATEGORIES[cat_key]
-        e = discord.Embed(
-            title=cat_key,
-            description=data["description"] + "\n\u200b",
-            color=0x2b2d31,
-        )
-        e.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        if guild.icon:
-            e.set_thumbnail(url=guild.icon.url)
-
-        lines = []
-        for cmd, desc in data["commands"]:
-            lines.append(f"`{cmd}`\n{desc}")
-
-        # split into two columns if long
-        half = (len(lines) + 1) // 2
-        left = "\n\n".join(lines[:half])
-        right = "\n\n".join(lines[half:])
-
-        if right:
-            e.add_field(name="\u200b", value=left, inline=True)
-            e.add_field(name="\u200b", value=right, inline=True)
-        else:
-            e.add_field(name="\u200b", value=left, inline=False)
-
-        e.set_footer(text=f"Prefix: {prefix} · <required> [optional]")
-        await ctx.send(embed=e)
+        embed = _build_category_embed(ctx.guild, prefix, cat_key)
+        view = HelpView(ctx.guild, prefix)
+        await ctx.send(embed=embed, view=view)
 
 
 async def setup(bot):
