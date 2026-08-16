@@ -70,6 +70,7 @@ class AntiNukeBot(commands.Bot):
             "voice",
             "autosetup",
             "activity_logs",
+            "embeds",
         ]
         for cog in cogs:
             try:
