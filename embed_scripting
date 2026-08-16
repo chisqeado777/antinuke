@@ -1,0 +1,189 @@
+"""
+embed_scripting.py — Motor compartido de "embed scripting" (sintaxis $v{}),
+inspirado en bleed. Lo usan: welcome.py, ,createembed / ,editembed, y
+cualquier comando futuro que necesite aceptar embeds personalizados.
+
+Sintaxis:
+  {embed}$v{title: ...}$v{description: ...}$v{color: #hex}
+  $v{author: texto && url_icono}$v{footer: texto && url_icono}
+  $v{thumbnail: url}$v{image: url}
+  $v{field: nombre && valor && inline}   (repetible)
+  $v{button: url && texto && emoji && enabled}   (repetible)
+  $v{message: texto fuera del embed}
+  $v{timestamp: true}
+
+Variables disponibles (se resuelven según el contexto disponible):
+  {user.mention} {user.tag} {user.name} {user.id} {user.avatar} {user.created}
+  {guild.name} {guild.count} {guild.icon} {guild.id} {guild.boostcount}
+  {channel.mention} {channel.name}
+"""
+
+import discord
+from datetime import datetime, timezone
+
+
+def extract_vblocks(text: str) -> list[str]:
+    """Extrae el contenido interior de cada bloque $v{...}, respetando llaves anidadas."""
+    blocks = []
+    i = 0
+    while i < len(text):
+        start = text.find("$v{", i)
+        if start == -1:
+            break
+        depth = 0
+        j = start + 2  # apunta a '{'
+        while j < len(text):
+            if text[j] == '{':
+                depth += 1
+            elif text[j] == '}':
+                depth -= 1
+                if depth == 0:
+                    blocks.append(text[start + 3:j])
+                    i = j + 1
+                    break
+            j += 1
+        else:
+            break
+    return blocks
+
+
+def parse_code(text: str) -> dict:
+    """Extrae todos los bloques $v{key: value}. 'button' y 'field' se acumulan como listas."""
+    result = {"buttons": [], "fields": []}
+    for block in extract_vblocks(text):
+        if ':' not in block:
+            continue
+        key, _, value = block.partition(':')
+        key = key.strip().lower()
+        value = value.strip()
+
+        if key == "button":
+            parts = [p.strip() for p in value.split("&&")]
+            url = parts[0] if len(parts) > 0 else ""
+            label = parts[1] if len(parts) > 1 else "Click"
+            emoji = parts[2] if len(parts) > 2 and parts[2] else None
+            enabled = "enabled" in value.lower()
+            if enabled and url:
+                result["buttons"].append({"url": url, "label": label, "emoji": emoji})
+        elif key == "field":
+            parts = [p.strip() for p in value.split("&&")]
+            name = parts[0] if len(parts) > 0 else "\u200b"
+            field_value = parts[1] if len(parts) > 1 else "\u200b"
+            inline = len(parts) > 2 and parts[2].lower() in ("true", "inline", "1")
+            result["fields"].append({"name": name, "value": field_value, "inline": inline})
+        else:
+            result[key] = value
+    return result
+
+
+def resolve_vars(text: str, *, member=None, guild=None, channel=None) -> str:
+    """Reemplaza variables {user.*}, {guild.*}, {channel.*} según el contexto disponible."""
+    if not text:
+        return text
+    if member is not None and guild is None:
+        guild = member.guild
+
+    if member is not None:
+        text = (
+            text
+            .replace("{user.mention}", member.mention)
+            .replace("{user.tag}", str(member))
+            .replace("{user.name}", member.display_name)
+            .replace("{user.id}", str(member.id))
+            .replace("{user.avatar}", member.display_avatar.url)
+            .replace("{user.created}", f"<t:{int(member.created_at.timestamp())}:R>")
+        )
+    if guild is not None:
+        text = (
+            text
+            .replace("{guild.name}", guild.name)
+            .replace("{guild.count}", str(guild.member_count))
+            .replace("{guild.id}", str(guild.id))
+            .replace("{guild.icon}", guild.icon.url if guild.icon else "")
+            .replace("{guild.boostcount}", str(guild.premium_subscription_count or 0))
+        )
+    if channel is not None:
+        text = (
+            text
+            .replace("{channel.mention}", channel.mention)
+            .replace("{channel.name}", channel.name)
+        )
+    return text
+
+
+def build_message(parsed: dict, *, member=None, guild=None, channel=None):
+    """
+    Construye (embed, content, view) a partir de un dict ya parseado con parse_code().
+    embed y view pueden ser None si no se definieron esos campos.
+    """
+    def r(text):
+        return resolve_vars(text, member=member, guild=guild, channel=channel)
+
+    content = r(parsed.get("message")) if parsed.get("message") else None
+
+    has_embed_fields = any(parsed.get(k) for k in (
+        "title", "description", "author", "footer", "thumbnail", "image", "color"
+    )) or parsed.get("fields")
+
+    embed = None
+    if has_embed_fields:
+        color_raw = (parsed.get("color") or "").strip()
+        color = 0x2b2d31
+        if color_raw.startswith("#"):
+            try:
+                color = int(color_raw[1:], 16)
+            except ValueError:
+                pass
+
+        embed = discord.Embed(color=color)
+
+        if parsed.get("title"):
+            embed.title = r(parsed["title"])
+        if parsed.get("url"):
+            embed.url = r(parsed["url"])
+        if parsed.get("description"):
+            embed.description = r(parsed["description"])
+
+        if parsed.get("author"):
+            parts = [p.strip() for p in parsed["author"].split("&&")]
+            icon = r(parts[1]) if len(parts) > 1 and parts[1].startswith("http") else None
+            embed.set_author(name=r(parts[0]), icon_url=icon)
+
+        if parsed.get("footer"):
+            parts = [p.strip() for p in parsed["footer"].split("&&")]
+            icon = r(parts[1]) if len(parts) > 1 and parts[1].startswith("http") else None
+            embed.set_footer(text=r(parts[0]), icon_url=icon)
+
+        if parsed.get("thumbnail"):
+            url = r(parsed["thumbnail"])
+            if url.startswith("http"):
+                embed.set_thumbnail(url=url)
+
+        if parsed.get("image"):
+            url = r(parsed["image"])
+            if url.startswith("http"):
+                embed.set_image(url=url)
+
+        for f in parsed.get("fields", []):
+            embed.add_field(name=r(f["name"]), value=r(f["value"]), inline=f["inline"])
+
+        if parsed.get("timestamp"):
+            embed.timestamp = datetime.now(timezone.utc)
+
+    view = None
+    buttons = parsed.get("buttons", [])
+    if buttons:
+        view = discord.ui.View()
+        for btn in buttons:
+            url = r(btn["url"])
+            label = r(btn["label"])
+            emoji = None
+            if btn.get("emoji"):
+                try:
+                    emoji = discord.PartialEmoji.from_str(r(btn["emoji"]))
+                except Exception:
+                    emoji = None
+            if url.startswith("http"):
+                view.add_item(discord.ui.Button(label=label, url=url, emoji=emoji, style=discord.ButtonStyle.link))
+
+    return embed, content, view
