@@ -69,6 +69,7 @@ class AntiNukeBot(commands.Bot):
             "unban",
             "voice",
             "autosetup",
+            "activity_logs",
         ]
         for cog in cogs:
             try:
