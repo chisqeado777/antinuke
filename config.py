@@ -16,6 +16,10 @@ def default_guild_config() -> dict:
         "modlog_channel": None,
         "whitelist": [],
         "antinuke_admins": [],
+        "warns": {},
+        "mod_actions": {},
+        "jail": {},
+        "jail_backups": {},
         "panic_active": False,
         "panic_state": {},
         "antinuke": {
