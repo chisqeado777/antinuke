@@ -18,7 +18,7 @@ from discord.ext import commands
 from config import db
 import logging
 from webhook_utils import send_via_webhook
-from embed_scripting import parse_code, build_message
+from embed_scripting import parse_code, validate_code, build_message
 
 log = logging.getLogger("antinuke.welcome")
 
@@ -100,6 +100,7 @@ class Welcome(commands.Cog):
           ,welcome add #chat {embed}$v{message: {user.mention}}$v{author: welcome, {user.tag}!}$v{description: hola}$v{thumbnail: {user.avatar}}
         """
         parsed = parse_code(config_text)
+        warnings = validate_code(config_text)
 
         entry = {"channel_id": channel.id, "parsed": parsed}
 
@@ -107,10 +108,13 @@ class Welcome(commands.Cog):
         entries.append(entry)
         _save_welcomes(ctx.guild.id, entries)
 
-        await ctx.send(embed=discord.Embed(
+        embed = discord.Embed(
             description=f"Welcome agregado en {channel.mention}. Entrada #{len(entries)}.\nUsa `,welcome test` para previsualizar.",
-            color=0x57f287,
-        ))
+            color=0xfee75c if warnings else 0x57f287,
+        )
+        if warnings:
+            embed.add_field(name="⚠️ Revisa esto", value="\n".join(f"• {w}" for w in warnings), inline=False)
+        await ctx.send(embed=embed)
 
     @welcome.command(name="list")
     @commands.has_permissions(manage_guild=True)
