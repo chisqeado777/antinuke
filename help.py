@@ -73,6 +73,18 @@ CATEGORIES = {
             (",unjail <usuario> [razón]", "Libera a un usuario y le devuelve sus roles anteriores"),
         ],
     },
+    "imagedrop": {
+        "label": "Reenvío de Imágenes",
+        "emoji": "🖼️",
+        "description": "Mándale links de fotos/gifs por DM al bot y los reenvía al canal configurado — así no tienes que guardarlos tú.",
+        "commands": [
+            (",setpostchannel <#canal>", "Define a qué canal se reenvían los links que mandes"),
+            (",posters add <usuario>", "Da acceso a alguien más para mandar links por DM"),
+            (",posters remove <usuario>", "Quita ese acceso"),
+            (",posters", "Lista quién tiene acceso"),
+            (",post <link1> <link2> ...", "Postea hasta 5 links directamente desde el server"),
+        ],
+    },
     "whitelist": {
         "label": "Whitelist",
         "emoji": "✅",
@@ -234,6 +246,7 @@ CATEGORIES = {
 
 ALIASES = {
     "mod": "moderacion", "moderation": "moderacion", "moderación": "moderacion",
+    "images": "imagedrop", "imagenes": "imagedrop", "fotos": "imagedrop",
     "modules": "modulos", "módulos": "modulos",
     "log": "logs", "settings": "logs",
     "setup": "autosetup", "auto": "autosetup", "autoconfig": "autosetup",
