@@ -45,6 +45,34 @@ CATEGORIES = {
             ("prune", "Bloquea expulsiones masivas (prune) no autorizadas"),
         ],
     },
+    "moderacion": {
+        "label": "Moderación",
+        "emoji": "🔨",
+        "description": "Comandos de moderación estándar: kicks, baneos, silencios, advertencias, purgas y más.",
+        "commands": [
+            (",kick <usuario> [razón]", "Expulsa a un miembro del servidor"),
+            (",ban <usuario> [días_borrado] [razón]", "Banea a un miembro (borra sus mensajes de hasta 7 días)"),
+            (",softban <usuario> [razón]", "Banea y desbanea al instante — borra mensajes sin expulsar de forma permanente"),
+            (",unban <id_usuario> [razón]", "Desbanea a un usuario por su ID"),
+            (",mute <usuario> <duración> [razón]", "Silencia temporalmente (ej. `10m`, `2h`, `1d`)"),
+            (",unmute <usuario> [razón]", "Quita el silencio antes de tiempo"),
+            (",warn <usuario> [razón]", "Registra una advertencia"),
+            (",warnings <usuario>", "Muestra todas las advertencias de un usuario"),
+            (",clearwarns <usuario>", "Borra todas las advertencias de un usuario"),
+            (",delwarn <usuario> <índice>", "Elimina una advertencia específica por número"),
+            (",purge <cantidad> [usuario]", "Borra mensajes recientes del canal (máx. 200)"),
+            (",lockchannel [#canal]", "Bloquea un canal específico (impide que @everyone escriba)"),
+            (",unlockchannel [#canal]", "Desbloquea un canal específico"),
+            (",slowmode <segundos> [#canal]", "Ajusta el modo lento del canal"),
+            (",nick <usuario> <apodo|reset>", "Cambia el apodo de un miembro"),
+            (",role add <usuario> <rol>", "Asigna un rol a un miembro"),
+            (",role remove <usuario> <rol>", "Quita un rol a un miembro"),
+            (",modlogs <usuario>", "Muestra el historial de moderación de un usuario"),
+            (",setupjail", "Crea el rol y canal de cuarentena, y bloquea el acceso en todo lo demás"),
+            (",jail <usuario> [razón]", "Aísla a un usuario: le quita roles y lo manda al canal de cuarentena"),
+            (",unjail <usuario> [razón]", "Libera a un usuario y le devuelve sus roles anteriores"),
+        ],
+    },
     "whitelist": {
         "label": "Whitelist",
         "emoji": "✅",
@@ -205,6 +233,7 @@ CATEGORIES = {
 }
 
 ALIASES = {
+    "mod": "moderacion", "moderation": "moderacion", "moderación": "moderacion",
     "modules": "modulos", "módulos": "modulos",
     "log": "logs", "settings": "logs",
     "setup": "autosetup", "auto": "autosetup", "autoconfig": "autosetup",
