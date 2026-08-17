@@ -10,7 +10,7 @@ Comandos:
 import discord
 from discord.ext import commands
 import re
-from embed_scripting import parse_code, build_message
+from embed_scripting import parse_code, validate_code, build_message
 from webhook_utils import edit_via_webhook
 
 MESSAGE_LINK_RE = re.compile(r"channels/(\d+)/(\d+)/(\d+)")
@@ -24,6 +24,7 @@ class Embeds(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def createembed(self, ctx: commands.Context, *, code: str):
         parsed = parse_code(code)
+        warnings = validate_code(code)
         embed, content, view = build_message(parsed, member=ctx.author, guild=ctx.guild, channel=ctx.channel)
 
         if embed is None and not content:
@@ -40,6 +41,13 @@ class Embeds(commands.Cog):
         if view:
             kwargs["view"] = view
         await ctx.send(**kwargs)
+
+        if warnings:
+            await ctx.send(embed=discord.Embed(
+                title="⚠️ Revisa esto",
+                description="\n".join(f"• {w}" for w in warnings),
+                color=0xfee75c,
+            ))
 
     @commands.command(name="editembed", aliases=["edite"])
     @commands.has_permissions(manage_guild=True)
@@ -64,6 +72,7 @@ class Embeds(commands.Cog):
             return await ctx.send(embed=discord.Embed(description="No encuentro ese canal.", color=0xed4245))
 
         parsed = parse_code(code)
+        warnings = validate_code(code)
         embed, content, view = build_message(parsed, member=ctx.author, guild=ctx.guild, channel=channel)
 
         kwargs = {}
@@ -85,6 +94,12 @@ class Embeds(commands.Cog):
             return await ctx.send(embed=discord.Embed(description=f"No se pudo editar: {e}", color=0xed4245))
 
         await ctx.send(embed=discord.Embed(description="Embed actualizado.", color=0x57f287))
+        if warnings:
+            await ctx.send(embed=discord.Embed(
+                title="⚠️ Revisa esto",
+                description="\n".join(f"• {w}" for w in warnings),
+                color=0xfee75c,
+            ))
 
 
 async def setup(bot: commands.Bot):
