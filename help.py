@@ -160,6 +160,27 @@ CATEGORIES = {
             (",unbanall", "Desbanea a todos los usuarios baneados del servidor"),
         ],
     },
+    "freefire": {
+        "label": "Free Fire",
+        "emoji": "🔥",
+        "description": "Búsqueda de jugadores de Free Fire por UID (API no oficial de comunidad).",
+        "commands": [
+            (",ffinfo <uid> [region]", "Perfil: nivel, rango, clan (región por defecto: `ind`)"),
+            (",ffstats <uid> [region]", "Estadísticas: victorias, kills, headshots"),
+            (",ffban <uid>", "Verifica si la cuenta está o estuvo baneada/reportada por hacks, con motivo y duración si aplica"),
+        ],
+    },
+    "autoresponder": {
+        "label": "Autoresponders",
+        "emoji": "💬",
+        "description": "Respuestas automáticas a palabras o frases exactas, en texto o embed.",
+        "commands": [
+            (",autoresponder add <trigger> | <respuesta>", "Crea una respuesta automática (texto o código de embed)"),
+            (",autoresponder remove <trigger>", "Elimina un autoresponder"),
+            (",autoresponder list", "Lista todos los autoresponders activos"),
+            (",autoresponder clear", "Elimina todos los autoresponders"),
+        ],
+    },
     "embeds": {
         "label": "Embeds Personalizados",
         "emoji": "🖼️",
