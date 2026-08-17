@@ -76,13 +76,16 @@ CATEGORIES = {
     "imagedrop": {
         "label": "Reenvío de Imágenes",
         "emoji": "🖼️",
-        "description": "Mándale links de fotos/gifs por DM al bot y los reenvía al canal configurado — así no tienes que guardarlos tú.",
+        "description": "Mándale links de fotos/gifs por DM al bot y elige con botones a cuál canal reenviarlos — así no tienes que guardarlos tú.",
         "commands": [
-            (",setpostchannel <#canal>", "Define a qué canal se reenvían los links que mandes"),
+            (",addpostchannel <nombre> <#canal>", "Agrega un canal de destino con nombre (ej. pfp, banners, aesthetic)"),
+            (",removepostchannel <nombre>", "Elimina un canal de destino"),
+            (",postchannels", "Lista los canales configurados"),
             (",posters add <usuario>", "Da acceso a alguien más para mandar links por DM"),
             (",posters remove <usuario>", "Quita ese acceso"),
             (",posters", "Lista quién tiene acceso"),
-            (",post <link1> <link2> ...", "Postea hasta 5 links directamente desde el server"),
+            (",post <link1> <link2> ...", "Postea hasta 5 links desde el server (te pregunta el canal con botones)"),
+            (",preview", "Adjunta 1-2 imágenes (avatar/banner) y genera una tarjeta de vista previa descargable"),
         ],
     },
     "whitelist": {
