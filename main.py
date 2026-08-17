@@ -59,6 +59,8 @@ class AntiNukeBot(commands.Bot):
             "backup",
             "antinuke",
             "whitelist",
+            "moderation",
+            "jail",
             "settings",
             "vc_tracker",
             "welcome",
