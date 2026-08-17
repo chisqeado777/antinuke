@@ -20,6 +20,8 @@ def default_guild_config() -> dict:
         "mod_actions": {},
         "jail": {},
         "jail_backups": {},
+        "post_channel_id": None,
+        "posters": [],
         "panic_active": False,
         "panic_state": {},
         "antinuke": {
