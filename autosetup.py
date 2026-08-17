@@ -15,7 +15,7 @@ canal legado (,setlogs) hasta que configures los canales dedicados.
 import discord
 from discord.ext import commands
 from config import db
-from logger import LOG_CATEGORIES
+from logger import LOG_CATEGORIES, LOG_CATEGORY_META
 import logging
 
 log = logging.getLogger("antinuke.autosetup")
@@ -74,10 +74,12 @@ async def _ensure_log_channels(guild: discord.Guild) -> dict[str, int]:
 
     result = {}
     for cat_key, channel_name in LOG_CATEGORIES.items():
+        _, _, description = LOG_CATEGORY_META.get(cat_key, ("📋", 0x2b2d31, ""))
         existing = discord.utils.get(category.text_channels, name=channel_name)
         if existing is None:
             existing = await guild.create_text_channel(
-                channel_name, category=category, reason="AntiNuke: setup de logs"
+                channel_name, category=category, topic=description,
+                reason="AntiNuke: setup de logs",
             )
         result[cat_key] = existing.id
     return result
@@ -110,7 +112,8 @@ class AutoSetup(commands.Cog):
             color=0x57f287,
         )
         channels_text = "\n".join(
-            f"`{cat}` → <#{cid}>" for cat, cid in log_channels.items()
+            f"{LOG_CATEGORY_META.get(cat, ('📋','', ''))[0]} <#{cid}> — {LOG_CATEGORY_META.get(cat, ('','', ''))[2]}"
+            for cat, cid in log_channels.items()
         )
         embed.add_field(name="Canales", value=channels_text, inline=False)
         await status_msg.edit(embed=embed)
