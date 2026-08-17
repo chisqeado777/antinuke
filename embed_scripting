@@ -47,6 +47,43 @@ def extract_vblocks(text: str) -> list[str]:
     return blocks
 
 
+KNOWN_KEYS = {
+    "title", "url", "description", "color", "author", "footer",
+    "thumbnail", "image", "field", "button", "message", "timestamp",
+}
+
+
+def validate_code(text: str) -> list[str]:
+    """
+    Revisa problemas comunes de sintaxis sin bloquear el guardado — solo para
+    avisarle al usuario qué se pudo leer y qué no.
+    """
+    warnings = []
+    total_starts = text.count("$v{")
+    blocks = extract_vblocks(text)
+
+    if len(blocks) < total_starts:
+        warnings.append(
+            f"Detecté {total_starts} bloque(s) `$v{{...}}` pero solo pude leer {len(blocks)} completo(s) — "
+            f"seguramente falta una `}}` de cierre en alguno. Recuerda: cada variable como `{{user.avatar}}` "
+            f"necesita su propia llave de cierre, ADEMÁS de la que cierra el bloque completo. "
+            f"Ejemplo correcto: `$v{{thumbnail: {{user.avatar}}}}` (dos `}}` al final)."
+        )
+
+    for block in blocks:
+        if ':' not in block:
+            warnings.append(f"El bloque `{block[:40]}` no tiene `:` — revisa el formato `{{clave: valor}}`.")
+            continue
+        key = block.split(':', 1)[0].strip().lower()
+        if key not in KNOWN_KEYS:
+            warnings.append(
+                f"No reconozco el bloque `{key}` y lo ignoré. Bloques válidos: "
+                f"{', '.join(sorted(KNOWN_KEYS))}."
+            )
+
+    return warnings
+
+
 def parse_code(text: str) -> dict:
     """Extrae todos los bloques $v{key: value}. 'button' y 'field' se acumulan como listas."""
     result = {"buttons": [], "fields": []}
