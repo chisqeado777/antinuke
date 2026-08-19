@@ -12,7 +12,7 @@ from discord.ext import commands
 # Sube el .gif a cualquier canal de tu server, copia el link del archivo
 # (clic derecho → Copiar enlace, o el link que te da Discord al subirlo) y
 # pégalo aquí.
-GIF_URL = "https://cdn.discordapp.com/attachments/1539750628006436885/1539754284814434385/4beaca89dc536ab5b2766d00af2f095e.png?ex=6a87776c&is=6a8625ec&hm=eb4b8463ef6d12fe86a761148d4ac1fd9d1b70fc0394911477d4dde148a83029&=&quality=lossless&width=688&height=229"
+GIF_URL = "PEGA_AQUI_EL_LINK_DE_TU_GIF"
 
 QUALITY_TEXT_PT = (
     "Hello! You downloaded a wallpaper, but the quality isn't quite what you wanted? "
