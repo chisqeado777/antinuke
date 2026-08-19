@@ -1,8 +1,8 @@
 """
-imagedrop.py — Manda fotos/gifs (ej. links de Pinterest) por DM al bot y los
-reenvía al canal que elijas con botones. Puedes tener varios canales
-nombrados (ej. "pfp", "banners", "aesthetic") y el bot te pregunta cuál usar
-cada vez que le mandas links.
+imagedrop.py — Manda fotos/gifs (ej. links de Pinterest) O archivos/fotos
+adjuntos directamente, por DM al bot, y elige con botones a cuál canal
+reenviarlos. Puedes tener varios canales nombrados (ej. "pfp", "banners",
+"aesthetic") y el bot te pregunta cuál usar cada vez.
 
 Comandos (dentro del servidor):
   ,addpostchannel <nombre> <#canal>    — agrega/actualiza un canal de destino (manage_guild)
@@ -10,11 +10,13 @@ Comandos (dentro del servidor):
   ,postchannels                        — lista los canales configurados
   ,posters add/remove/list <@usuario>  — quién más puede usar esto por DM,
                                           además de quien tenga manage_guild (manage_guild)
-  ,post <link1> <link2> ...            — postea hasta 5 links desde el server (te pregunta el canal)
+  ,post [links] [+ adjuntos]           — postea hasta 5 (links y/o archivos, combinados)
+                                          desde el server (te pregunta el canal)
 
 Uso por DM:
-  Mándale al bot un mensaje privado con hasta 5 links y te pregunta con
-  botones a cuál canal mandarlos.
+  Mándale al bot un mensaje privado con hasta 5 links, o adjunta hasta 5
+  fotos/archivos directamente (o combina ambos), y te pregunta con botones
+  a cuál canal mandarlos.
 """
 
 import discord
@@ -22,17 +24,75 @@ from discord.ext import commands
 from config import db
 from webhook_utils import send_via_webhook
 import re
+import io
 import logging
+import aiohttp
 
 log = logging.getLogger("antinuke.imagedrop")
 
 URL_RE = re.compile(r"https?://\S+")
-MAX_LINKS = 5
+MAX_ITEMS = 5
 BUTTON_TIMEOUT = 120
+DIRECT_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+_META_OG_IMAGE_RE = re.compile(r'<meta[^>]+(?:property|name)=["\']og:image["\'][^>]*>', re.IGNORECASE)
+_CONTENT_ATTR_RE = re.compile(r'content=["\']([^"\']+)["\']', re.IGNORECASE)
 
 
-def _extract_links(text: str) -> list[str]:
-    return URL_RE.findall(text)[:MAX_LINKS]
+def _extract_items(message: discord.Message) -> list[dict]:
+    """Junta links de texto + archivos/fotos adjuntos, hasta MAX_ITEMS en total."""
+    items = [{"type": "link", "value": url} for url in URL_RE.findall(message.content)]
+    items += [{"type": "attachment", "value": att} for att in message.attachments]
+    return items[:MAX_ITEMS]
+
+
+async def _resolve_image_url(session: aiohttp.ClientSession, url: str) -> str | None:
+    """Si el link ya es una imagen directa, lo regresa tal cual. Si no (ej. una
+    página de Pinterest), entra a la página y saca la imagen real del meta
+    tag og:image, para no depender de que Discord la adivine."""
+    lowered = url.lower().split("?")[0]
+    if lowered.endswith(DIRECT_IMAGE_EXTS):
+        return url
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8), headers={"User-Agent": "Mozilla/5.0"}) as resp:
+            if resp.status != 200:
+                return None
+            html = await resp.text(errors="ignore")
+    except Exception as e:
+        log.warning(f"No se pudo resolver la imagen de {url}: {e}")
+        return None
+
+    tag_match = _META_OG_IMAGE_RE.search(html)
+    if not tag_match:
+        return None
+    content_match = _CONTENT_ATTR_RE.search(tag_match.group(0))
+    return content_match.group(1) if content_match else None
+
+
+async def _build_payload(items: list[dict]) -> tuple[list[discord.Embed], list[discord.File]]:
+    """Convierte los links en embeds de solo-imagen (sin texto visible del link)
+    y los adjuntos en discord.File para reenviarlos tal cual."""
+    embeds = []
+    files = []
+
+    link_items = [it["value"] for it in items if it["type"] == "link"]
+    if link_items:
+        async with aiohttp.ClientSession() as session:
+            for url in link_items:
+                resolved = await _resolve_image_url(session, url)
+                embed = discord.Embed()
+                embed.set_image(url=resolved or url)
+                embeds.append(embed)
+
+    for it in items:
+        if it["type"] == "attachment":
+            att: discord.Attachment = it["value"]
+            try:
+                data = await att.read()
+                files.append(discord.File(io.BytesIO(data), filename=att.filename))
+            except (discord.HTTPException, discord.Forbidden) as e:
+                log.warning(f"No se pudo leer el adjunto {att.filename}: {e}")
+
+    return embeds, files
 
 
 def _is_allowed(member: discord.Member, config: dict) -> bool:
@@ -51,12 +111,12 @@ def _get_post_channels(config: dict) -> dict:
 
 
 class ChannelPickView(discord.ui.View):
-    """Botones para elegir a cuál canal mandar la tanda de links."""
+    """Botones para elegir a cuál canal mandar la tanda de links/archivos."""
 
-    def __init__(self, author_id: int, links: list[str], options: list[tuple[str, discord.TextChannel]]):
+    def __init__(self, author_id: int, items: list[dict], options: list[tuple[str, discord.TextChannel]]):
         super().__init__(timeout=BUTTON_TIMEOUT)
         self.author_id = author_id
-        self.links = links
+        self.items = items
         for label, channel in options[:25]:
             button = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
             button.callback = self._make_callback(channel)
@@ -67,20 +127,27 @@ class ChannelPickView(discord.ui.View):
             if interaction.user.id != self.author_id:
                 return await interaction.response.send_message("Esto no es para ti.", ephemeral=True)
 
+            await interaction.response.defer()
+            embeds, files = await _build_payload(self.items)
             try:
-                await send_via_webhook(channel, content="\n".join(self.links))
+                kwargs = {}
+                if embeds:
+                    kwargs["embeds"] = embeds
+                if files:
+                    kwargs["files"] = files
+                await send_via_webhook(channel, **kwargs)
             except (discord.Forbidden, discord.HTTPException) as e:
                 log.warning(f"No se pudo postear en {channel}: {e}")
-                return await interaction.response.edit_message(
-                    content=f"❌ No pude mandar los links a {channel.mention}.", embed=None, view=None,
+                return await interaction.edit_original_response(
+                    content=f"❌ No pude mandar eso a {channel.mention}.", embed=None, view=None,
                 )
 
             for item in self.children:
                 item.disabled = True
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 content=None,
                 embed=discord.Embed(
-                    description=f"✅ Mandé `{len(self.links)}` link(s) a {channel.mention}.",
+                    description=f"✅ Mandé `{len(self.items)}` cosa(s) a {channel.mention}.",
                     color=0x57f287,
                 ),
                 view=self,
@@ -105,8 +172,8 @@ class ImageDrop(commands.Cog):
         if message.author.bot or message.guild is not None:
             return  # solo nos interesan los DMs
 
-        links = _extract_links(message.content)
-        if not links:
+        items = _extract_items(message)
+        if not items:
             return
 
         options = []
@@ -128,10 +195,10 @@ class ImageDrop(commands.Cog):
         if not options:
             return  # nadie configuró canales, o no tiene permiso — ignoramos en silencio
 
-        view = ChannelPickView(message.author.id, links, options)
+        view = ChannelPickView(message.author.id, items, options)
         await message.channel.send(
             embed=discord.Embed(
-                description=f"¿A cuál canal mando estos `{len(links)}` link(s)?",
+                description=f"¿A cuál canal mando esto (`{len(items)}` cosa(s))?",
                 color=0x2b2d31,
             ),
             view=view,
@@ -218,7 +285,7 @@ class ImageDrop(commands.Cog):
     # ── Comando directo desde el server ─────────────────────────────────────
 
     @commands.command(name="post")
-    async def post(self, ctx: commands.Context, *, links_text: str):
+    async def post(self, ctx: commands.Context):
         config = db.get_guild(ctx.guild.id)
         if not _is_allowed(ctx.author, config):
             return await ctx.send(embed=discord.Embed(
@@ -233,9 +300,12 @@ class ImageDrop(commands.Cog):
                 color=0xed4245,
             ))
 
-        links = _extract_links(links_text)
-        if not links:
-            return await ctx.send(embed=discord.Embed(description="No detecté ningún link ahí.", color=0xed4245))
+        items = _extract_items(ctx.message)
+        if not items:
+            return await ctx.send(embed=discord.Embed(
+                description="Adjunta fotos/archivos y/o pon links junto con `,post`.",
+                color=0xed4245,
+            ))
 
         options = []
         for name, cid in channels.items():
@@ -243,9 +313,9 @@ class ImageDrop(commands.Cog):
             if channel:
                 options.append((name, channel))
 
-        view = ChannelPickView(ctx.author.id, links, options)
+        view = ChannelPickView(ctx.author.id, items, options)
         await ctx.send(
-            embed=discord.Embed(description=f"¿A cuál canal mando estos `{len(links)}` link(s)?", color=0x2b2d31),
+            embed=discord.Embed(description=f"¿A cuál canal mando esto (`{len(items)}` cosa(s))?", color=0x2b2d31),
             view=view,
         )
 
