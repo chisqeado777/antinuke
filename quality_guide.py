@@ -5,22 +5,22 @@ quality_guide.py — Comando fijo que manda la tarjeta de guía de calidad
 Comando: ,calidad
 """
 
+import os
 import discord
 from discord.ext import commands
 
-# TODO: reemplaza esto por el link directo de tu gif animado real (no un PNG).
-# Sube el .gif a cualquier canal de tu server, copia el link del archivo
-# (clic derecho → Copiar enlace, o el link que te da Discord al subirlo) y
-# pégalo aquí.
-GIF_URL = "PEGA_AQUI_EL_LINK_DE_TU_GIF"
+# El gif vive dentro del repo — el bot lo manda desde disco cada vez,
+# así nunca depende de un link externo que pueda caducar.
+GIF_PATH = os.path.join(os.path.dirname(__file__), "assets", "quality_upscale.gif")
+GIF_FILENAME = "quality_upscale.gif"
 
-QUALITY_TEXT_PT = (
-    "Hello! You downloaded a wallpaper, but the quality isn't quite what you wanted? "
-    "Follow the guide below.\n\n"
-    "**How to use:**\n"
-    "• Download the wallpaper of your choice.\n"
-    "• If the quality isn't good, click the button below to upscale your image by **400x**.\n"
-    "• After that, just save and use your new wallpaper."
+QUALITY_TEXT_ES = (
+    "¡Hola! ¿Descargaste un wallpaper pero la calidad no quedó como querías? "
+    "Sigue la guía de abajo.\n\n"
+    "**Cómo usar:**\n"
+    "• Descarga el wallpaper que quieras.\n"
+    "• Si la calidad no es buena, dale clic al botón de abajo para mejorar tu imagen en **400x**.\n"
+    "• Después de eso, solo guarda y usa tu nuevo wallpaper."
 )
 
 QUALITY_TEXT_EN = (
@@ -40,9 +40,7 @@ class QualityGuide(commands.Cog):
     @commands.command(name="calidad")
     async def calidad(self, ctx: commands.Context):
         embed = discord.Embed(color=0x2b2d31)
-        if GIF_URL and "PEGA_AQUI" not in GIF_URL:
-            embed.set_image(url=GIF_URL)
-        embed.add_field(name="🇧🇷 - Quality Introduction", value=QUALITY_TEXT_PT, inline=False)
+        embed.add_field(name="Introducción de Calidad", value=QUALITY_TEXT_ES, inline=False)
         embed.add_field(name="🇺🇸 - Quality Guide", value=QUALITY_TEXT_EN, inline=False)
 
         view = discord.ui.View()
@@ -50,8 +48,15 @@ class QualityGuide(commands.Cog):
             label="Calidad", url="https://imageupscaler.com/", style=discord.ButtonStyle.link,
         ))
 
-        await ctx.send(embed=embed, view=view)
+        kwargs = {"embed": embed, "view": view}
+        if os.path.exists(GIF_PATH):
+            file = discord.File(GIF_PATH, filename=GIF_FILENAME)
+            embed.set_image(url=f"attachment://{GIF_FILENAME}")
+            kwargs["file"] = file
+
+        await ctx.send(**kwargs)
 
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(QualityGuide(bot))
+
