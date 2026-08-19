@@ -62,6 +62,8 @@ class AntiNukeBot(commands.Bot):
             "moderation",
             "jail",
             "imagedrop",
+            "preview",
+            "quality_guide",
             "settings",
             "vc_tracker",
             "welcome",
